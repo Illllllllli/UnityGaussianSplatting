@@ -40,6 +40,8 @@
 float4x4 _MatrixObjectToWorld;
 float4x4 _MatrixWorldToObject;
 float4x4 _MatrixMV;
+
+float4x4 _MatrixVP;//新增
 float4 _VecScreenParams;
 float4 _VecWorldSpaceCameraPos;
 int _SelectionMode;
@@ -197,7 +199,8 @@ void CSCalcViewData (uint3 id : SV_DispatchThreadID)
     SplatViewData view = (SplatViewData)0;
     
     float3 centerWorldPos = mul(_MatrixObjectToWorld, float4(splat.pos,1)).xyz;
-    float4 centerClipPos = mul(UNITY_MATRIX_VP, float4(centerWorldPos, 1));
+    // float4 centerClipPos = mul(UNITY_MATRIX_VP, float4(centerWorldPos, 1));//这里需要改成从外部传入。因为UNITY_MATRIX_VP不一定是运行摄像机的矩阵
+    float4 centerClipPos = mul(_MatrixVP, float4(centerWorldPos, 1));
     half opacityScale = _SplatOpacityScale;
     float splatScale = _SplatScale;
 
@@ -402,7 +405,8 @@ void CSSelectionUpdate (uint3 id : SV_DispatchThreadID)
         return;
 
     float3 centerWorldPos = mul(_MatrixObjectToWorld, float4(pos,1)).xyz;
-    float4 centerClipPos = mul(UNITY_MATRIX_VP, float4(centerWorldPos, 1));
+    // float4 centerClipPos = mul(UNITY_MATRIX_VP, float4(centerWorldPos, 1));//这里需要改成从外部传入。因为UNITY_MATRIX_VP不一定是运行摄像机的矩阵
+    float4 centerClipPos = mul(_MatrixVP, float4(centerWorldPos, 1));
     bool behindCam = centerClipPos.w <= 0;
     if (behindCam)
         return;

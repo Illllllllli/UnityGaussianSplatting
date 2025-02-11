@@ -182,6 +182,7 @@ namespace GaussianSplatting.Editor
         // build a rect that always has a positive size
         static Rect FromToRect(Vector2 from, Vector2 to)
         {
+            
             if (from.x > to.x)
                 (from.x, to.x) = (to.x, from.x);
             if (from.y > to.y)
