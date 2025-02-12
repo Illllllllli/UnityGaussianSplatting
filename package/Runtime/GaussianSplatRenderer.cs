@@ -889,7 +889,6 @@ namespace GaussianSplatting.Runtime
             using var cmb = new CommandBuffer { name = "SplatSelectionUpdate" };
             SetAssetDataOnCS(cmb, KernelIndices.SelectionUpdate);
             cmb.SetComputeMatrixParam(m_CSSplatUtilities, Props.MatrixVP, matViewProj);
-
             cmb.SetComputeMatrixParam(m_CSSplatUtilities, Props.MatrixMV, matView * matO2W);
             cmb.SetComputeMatrixParam(m_CSSplatUtilities, Props.MatrixObjectToWorld, matO2W);
             cmb.SetComputeMatrixParam(m_CSSplatUtilities, Props.MatrixWorldToObject, matW2O);

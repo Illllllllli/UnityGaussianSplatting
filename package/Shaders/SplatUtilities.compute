@@ -199,8 +199,7 @@ void CSCalcViewData (uint3 id : SV_DispatchThreadID)
     SplatViewData view = (SplatViewData)0;
     
     float3 centerWorldPos = mul(_MatrixObjectToWorld, float4(splat.pos,1)).xyz;
-    // float4 centerClipPos = mul(UNITY_MATRIX_VP, float4(centerWorldPos, 1));//这里需要改成从外部传入。因为UNITY_MATRIX_VP不一定是运行摄像机的矩阵
-    float4 centerClipPos = mul(_MatrixVP, float4(centerWorldPos, 1));
+    float4 centerClipPos = mul(UNITY_MATRIX_VP, float4(centerWorldPos, 1));
     half opacityScale = _SplatOpacityScale;
     float splatScale = _SplatScale;
 

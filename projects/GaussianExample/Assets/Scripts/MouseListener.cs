@@ -16,6 +16,7 @@ public class MouseListener : MonoBehaviour
     public Camera mainCamera;
     private bool isMousePressed = false;
     private GaussianSplatRenderer gsRenderer;
+    private Vector2 previousMousePosition = Vector2.zero;
 
     private void Awake()
     {
@@ -60,9 +61,11 @@ public class MouseListener : MonoBehaviour
         };
     }
 
+
     private void Update()
     {
         //移动
+
         if (isMousePressed)
         {
             //选择状态下移动
@@ -71,11 +74,17 @@ public class MouseListener : MonoBehaviour
                 bool isSubtract = ((Input.GetKey(KeyCode.LeftControl)) || (Input.GetKey(KeyCode.RightControl)));
                 Vector2 rectStart = SelectTool.MouseStartDragPos;
                 Vector2 rectEnd = Input.mousePosition;
+                //由于HandleUtility.GUIPointToScreenPixelCoordinate似乎不能在点击停顿的状态下正常使用，
+                //所以判断条件需要进行修改,仅在鼠标拖动时更新选区
+                if (previousMousePosition == rectEnd)
+                {
+                    return;
+                }
+                previousMousePosition = rectEnd;
                 //y坐标偏移
                 rectStart.y = mainCamera.pixelHeight - rectStart.y;
                 rectEnd.y = mainCamera.pixelHeight - rectEnd.y;
-                Rect rect = SelectTool.FromToRect(rectStart,rectEnd);
-                // Debug.Log(rect.min.ToString()+rect.max.ToString());
+                Rect rect = SelectTool.FromToRect(rectStart, rectEnd);
                 Vector2 rectMin = HandleUtility.GUIPointToScreenPixelCoordinate(rect.min);
                 Vector2 rectMax = HandleUtility.GUIPointToScreenPixelCoordinate(rect.max);
                 // Debug.Log(rectMin.ToString()+rectMax.ToString());
