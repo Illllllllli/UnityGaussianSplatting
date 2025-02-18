@@ -1,3 +1,4 @@
+using System;
 using GaussianSplatting.Runtime;
 using UnityEngine;
 using UnityEngine.UI;
@@ -22,6 +23,11 @@ namespace GSTestScene
         {
             //绑定gs对象
             _gsRenderer = gaussianSplats.GetComponent<GaussianSplatRenderer>();
+            //配置按钮功能
+            viewButton.onClick.AddListener(Status.SwitchViewMode);
+            selectButton.onClick.AddListener(Status.SwitchSelectMode);
+            editButton.onClick.AddListener(Status.SwitchEditMode);
+
             //配置滚动条属性
             Slider[] sliders = uiCanvas.GetComponentsInChildren<Slider>();
             foreach (var slider in sliders)
@@ -38,33 +44,34 @@ namespace GSTestScene
                         break;
                 }
             }
+
+            // 切换模式时按钮样式调整
+            Status.ModeChanged += (_, mode) =>
+            {
+                switch (mode)
+                {
+                    case Mode.Edit:
+                        SetButtonColor(viewButton, DisableColor);
+                        SetButtonColor(selectButton, DisableColor);
+                        SetButtonColor(editButton, EnableColor);
+                        break;
+                    case Mode.Select:
+                        SetButtonColor(viewButton, DisableColor);
+                        SetButtonColor(selectButton, EnableColor);
+                        SetButtonColor(editButton, DisableColor);
+                        break;
+                    case Mode.View:
+                        SetButtonColor(viewButton, EnableColor);
+                        SetButtonColor(selectButton, DisableColor);
+                        SetButtonColor(editButton, DisableColor);
+                        break;
+
+                    default:
+                        throw new ArgumentOutOfRangeException(nameof(mode), mode, null);
+                }
+            };
             //切换到浏览模式
-            SwitchViewMode();
-        }
-
-        //按钮使用
-        public void SwitchViewMode()
-        {
             Status.SwitchViewMode();
-            SetButtonColor(viewButton, EnableColor);
-            SetButtonColor(selectButton, DisableColor);
-            SetButtonColor(editButton, DisableColor);
-        }
-
-        public void SwitchSelectMode()
-        {
-            Status.SwitchSelectMode();
-            SetButtonColor(viewButton, DisableColor);
-            SetButtonColor(selectButton, EnableColor);
-            SetButtonColor(editButton, DisableColor);
-        }
-
-        public void SwitchEditMode()
-        {
-            Status.SwitchEditMode(_gsRenderer);
-            SetButtonColor(viewButton, DisableColor);
-            SetButtonColor(selectButton, DisableColor);
-            SetButtonColor(editButton, EnableColor);
         }
 
         //更换按钮颜色

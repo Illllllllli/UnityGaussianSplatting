@@ -29,6 +29,9 @@ namespace GaussianSplatting.Runtime
         private LocalKeyword m_sortPairKeyword;
         private LocalKeyword m_vulkanKeyword;
 
+        /// <summary>
+        /// GPU排序所需的参数
+        /// </summary>
         public struct Args
         {
             public uint             count;
@@ -38,6 +41,9 @@ namespace GaussianSplatting.Runtime
             internal int workGroupCount;
         }
 
+        /// <summary>
+        /// GPU排序用到的一些缓冲区资源
+        /// </summary>
         public struct SupportResources
         {
             public GraphicsBuffer altBuffer;
@@ -45,13 +51,26 @@ namespace GaussianSplatting.Runtime
             public GraphicsBuffer passHistBuffer;
             public GraphicsBuffer globalHistBuffer;
 
+            /// <summary>
+            /// 根据GS数量，初始化相应的排序所需缓冲区资源。
+            /// </summary>
+            /// <param name="count">GS数量</param>
+            /// <returns></returns>
             public static SupportResources Load(uint count)
             {
                 //This is threadBlocks * DEVICE_RADIX_SORT_RADIX
+                // 计算通道直方图缓冲区和全局直方图缓冲区的大小
                 uint scratchBufferSize = DivRoundUp(count, DEVICE_RADIX_SORT_PARTITION_SIZE) * DEVICE_RADIX_SORT_RADIX; 
                 uint reducedScratchBufferSize = DEVICE_RADIX_SORT_RADIX * DEVICE_RADIX_SORT_PASSES;
 
                 var target = GraphicsBuffer.Target.Structured;
+                // 创建了四个图形缓冲区：
+                // altBuffer：用于存储排序过程中的交替缓冲区。
+                // altPayloadBuffer：用于存储排序过程中的替代有效载荷。
+                // passHistBuffer：用于存储通道直方图数据。
+                // globalHistBuffer：用于存储全局直方图数据。
+                // 每个缓冲区都使用 GraphicsBuffer.Target.Structured 目标创建，
+                // 这意味着它们是结构化缓冲区，可以存储固定大小的数据结构。
                 var resources = new SupportResources
                 {
                     altBuffer = new GraphicsBuffer(target, (int)count, 4) { name = "DeviceRadixAlt" },
@@ -61,7 +80,10 @@ namespace GaussianSplatting.Runtime
                 };
                 return resources;
             }
-
+            
+            /// <summary>
+            /// 释放排序所需缓冲区资源
+            /// </summary>
             public void Dispose()
             {
                 altBuffer?.Dispose();
@@ -139,6 +161,11 @@ namespace GaussianSplatting.Runtime
             public uint padding0;                       // Padding - unused
         }
 
+        /// <summary>
+        /// 根据排序键值缓冲区中的距离值对溅射点进行排序
+        /// </summary>
+        /// <param name="cmd">命令缓冲区</param>
+        /// <param name="args">排序参数</param>
         public void Dispatch(CommandBuffer cmd, Args args)
         {
             Assert.IsTrue(Valid);

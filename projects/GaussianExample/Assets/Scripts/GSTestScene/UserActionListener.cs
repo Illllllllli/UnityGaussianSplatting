@@ -66,7 +66,7 @@ namespace GSTestScene
             //切换模式
             _userAction.Player.SwitchViewMode.performed += ctx => { Status.SwitchViewMode(); };
             _userAction.Player.SwitchSelectMode.performed += ctx => { Status.SwitchSelectMode(); };
-            _userAction.Player.SwitchEditMode.performed += ctx => { Status.SwitchEditMode(_gsRenderer); };
+            _userAction.Player.SwitchEditMode.performed += ctx => { Status.SwitchEditMode(); };
             //移动视角(x,y,z分别为左右，上下，前后)
             _userAction.Player.Akey.performed += ctx => _cameraMovement.x--;
             _userAction.Player.Akey.canceled += ctx => _cameraMovement.x++;
@@ -80,7 +80,7 @@ namespace GSTestScene
             _userAction.Player.Ekey.canceled += ctx => _cameraMovement.y--;
             _userAction.Player.Qkey.performed += ctx => _cameraMovement.y--;
             _userAction.Player.Qkey.canceled += ctx => _cameraMovement.y++;
-
+            // 监听鼠标移动
             _userAction.Player.MouseMovement.performed += ctx =>
             {
                 if (!_isMousePressed) return;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #define GROUP_SIZE 1024
 
+// 声明了计算着色器的入口点函数。每个函数名对应一个独立的计算任务，可以在运行时通过这些名称调用相应的计算着色器。
 #pragma kernel CSSetIndices
 #pragma kernel CSCalcDistances
 #pragma kernel CSCalcViewData
@@ -18,11 +19,13 @@
 #pragma kernel CSCopySplats
 
 // DeviceRadixSort
+// 条件编译指令
 #pragma multi_compile __ KEY_UINT KEY_INT KEY_FLOAT
 #pragma multi_compile __ PAYLOAD_UINT PAYLOAD_INT PAYLOAD_FLOAT
 #pragma multi_compile __ SHOULD_ASCEND
 #pragma multi_compile __ SORT_PAIRS
 #pragma multi_compile __ VULKAN
+// 声明与设备基数排序（Device Radix Sort）相关的计算着色器入口点
 #pragma kernel InitDeviceRadixSort
 #pragma kernel Upsweep
 #pragma kernel Scan
@@ -46,6 +49,7 @@ float4 _VecScreenParams;
 float4 _VecWorldSpaceCameraPos;
 int _SelectionMode;
 
+// RWStructuredBuffer表示一个可读写的缓冲区，类似于C++中的数组
 RWStructuredBuffer<uint> _SplatSortDistances;
 RWStructuredBuffer<uint> _SplatSortKeys;
 uint _SplatCount;
@@ -58,6 +62,8 @@ uint FloatToSortableUint(float f)
     return fu ^ mask;
 }
 
+// 并行代码
+// 初始化排序键
 [numthreads(GROUP_SIZE,1,1)]
 void CSSetIndices (uint3 id : SV_DispatchThreadID)
 {

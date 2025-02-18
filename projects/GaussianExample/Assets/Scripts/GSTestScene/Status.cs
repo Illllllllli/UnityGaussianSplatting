@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using GaussianSplatting.Runtime;
@@ -21,10 +22,25 @@ namespace GSTestScene
             isInteractive ? _translateSensitivity : 0f;
 
 
+        // 检查当前鼠标状态能否与场景交互
         public static bool isInteractive { get; private set; } = true;
+        //查看器模式改变时触发回调
+        public static event EventHandler<Mode> ModeChanged;
+
+        private static Mode _mode;
 
         //查看器模式（浏览/选择/编辑）
-        public static Mode mode { get; private set; }
+        public static Mode mode
+        {
+            get => _mode;
+            private set
+            {
+                if (_mode == value) return;
+                _mode = value;
+                ModeChanged?.Invoke(_mode, value);
+            }
+        }
+        
 
         private void Awake()
         {
@@ -41,27 +57,27 @@ namespace GSTestScene
             _translateSensitivity = value;
         }
 
-        public static void UpdateCameraMovable(bool value)
+        public static void UpdateIsInteractive(bool value)
         {
             isInteractive = value;
         }
 
         public static void SwitchSelectMode()
         {
-            Status.mode = Mode.Select;
+            mode = Mode.Select;
             Debug.Log("select");
         }
 
         public static void SwitchViewMode()
         {
-            Status.mode = Mode.View;
+            mode = Mode.View;
             Debug.Log("view");
         }
 
-        public static void SwitchEditMode(GaussianSplatRenderer gsRenderer)
+        public static void SwitchEditMode()
         {
-            Status.mode = Mode.Edit;
-            gsRenderer.EditDeselectAll();
+            mode = Mode.Edit;
+            // gsRenderer.EditDeselectAll();
             Debug.Log("edit");
         }
     }

@@ -149,16 +149,29 @@ namespace GaussianSplatting.Runtime
             };
         }
 
+        /// <summary>
+        /// 计算颜色纹理所需的大小（存储每个GS的颜色）
+        /// </summary>
+        /// <param name="splatCount">GS数量</param>
+        /// <returns></returns>
         public static (int,int) CalcTextureSize(int splatCount)
         {
+            //固定宽度，计算高度
             int width = kTextureWidth;
             int height = math.max(1, (splatCount + width - 1) / width);
             // our swizzle tiles are 16x16, so make texture multiple of that height
+            //确保高度是16的倍数
             int blockHeight = 16;
             height = (height + blockHeight - 1) / blockHeight * blockHeight;
             return (width, height);
         }
 
+        /// <summary>
+        /// 将自定义的颜色格式映射到Unity内置颜色格式
+        /// </summary>
+        /// <param name="format">自定义的颜色格式枚举量</param>
+        /// <returns>映射的Unity内置颜色格式</returns>
+        /// <exception cref="ArgumentOutOfRangeException">未预期的颜色格式</exception>
         public static GraphicsFormat ColorFormatToGraphics(ColorFormat format)
         {
             return format switch

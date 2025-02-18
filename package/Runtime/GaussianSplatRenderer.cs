@@ -14,8 +14,10 @@ using UnityEngine.XR;
 
 namespace GaussianSplatting.Runtime
 {
+    /// 渲染系统类。使用单例模式
     class GaussianSplatRenderSystem
     {
+        // 用于性能分析的参数
         // ReSharper disable MemberCanBePrivate.Global - used by HDRP/URP features that are not always compiled
         internal static readonly ProfilerMarker s_ProfDraw = new(ProfilerCategory.Render, "GaussianSplat.Draw",
             MarkerFlags.SampleGPU);
@@ -27,15 +29,24 @@ namespace GaussianSplatting.Runtime
             new(ProfilerCategory.Render, "GaussianSplat.CalcView", MarkerFlags.SampleGPU);
         // ReSharper restore MemberCanBePrivate.Global
 
+        /// 单例
         public static GaussianSplatRenderSystem instance => ms_Instance ??= new GaussianSplatRenderSystem();
+
         static GaussianSplatRenderSystem ms_Instance;
 
+        /// 存储GS渲染器和对应的材质属性块
         readonly Dictionary<GaussianSplatRenderer, MaterialPropertyBlock> m_Splats = new();
+
+        /// 存储已完成命令缓冲区的相机
         readonly HashSet<Camera> m_CameraCommandBuffersDone = new();
+
+        /// 存储当前活动的GS渲染器与对应材质属性块
         readonly List<(GaussianSplatRenderer, MaterialPropertyBlock)> m_ActiveSplats = new();
 
+        /// 命令缓冲区
         CommandBuffer m_CommandBuffer;
 
+        /// 注册一个新的GS渲染器（在GS渲染器中调用）
         public void RegisterSplat(GaussianSplatRenderer r)
         {
             if (m_Splats.Count == 0)
@@ -47,6 +58,7 @@ namespace GaussianSplatting.Runtime
             m_Splats.Add(r, new MaterialPropertyBlock());
         }
 
+        //注销一个GS渲染器
         public void UnregisterSplat(GaussianSplatRenderer r)
         {
             if (!m_Splats.ContainsKey(r))
@@ -75,13 +87,17 @@ namespace GaussianSplatting.Runtime
             }
         }
 
+        /// 为给定的相机收集所有活动且有效的GS渲染器
         // ReSharper disable once MemberCanBePrivate.Global - used by HDRP/URP features that are not always compiled
         public bool GatherSplatsForCamera(Camera cam)
         {
             if (cam.cameraType == CameraType.Preview)
                 return false;
+
             // gather all active & valid splat objects
+            // 重置列表
             m_ActiveSplats.Clear();
+            //筛选活动且有效的GS渲染器到列表中
             foreach (var kvp in m_Splats)
             {
                 var gs = kvp.Key;
@@ -90,11 +106,13 @@ namespace GaussianSplatting.Runtime
                 m_ActiveSplats.Add((kvp.Key, kvp.Value));
             }
 
+            //列表为空
             if (m_ActiveSplats.Count == 0)
                 return false;
 
             // sort them by order and depth from camera
             var camTr = cam.transform;
+            //给GS渲染器排序，第一次序为自定义RenderOrder,第二次序为距离相机深度
             m_ActiveSplats.Sort((a, b) =>
             {
                 var orderA = a.Item1.m_RenderOrder;
@@ -112,24 +130,28 @@ namespace GaussianSplatting.Runtime
         }
 
         // ReSharper disable once MemberCanBePrivate.Global - used by HDRP/URP features that are not always compiled
+        /// 根据给定的相机和命令缓冲区，给GS渲染器排序并进行渲染
         public Material SortAndRenderSplats(Camera cam, CommandBuffer cmb)
         {
+            // 存储最终材质
             Material matComposite = null;
-            foreach (var kvp in m_ActiveSplats)
+            // 遍历所有的活动GS渲染器和对应材质块
+            foreach (var (gs, materialPropertyBlock) in m_ActiveSplats)
             {
-                var gs = kvp.Item1;
                 gs.EnsureMaterials();
                 matComposite = gs.m_MatComposite;
-                var mpb = kvp.Item2;
 
                 // sort
+                // 根据排序参数（每n帧排序一次）确定是否需要给高斯点排序。同时增加排序计数
                 var matrix = gs.transform.localToWorldMatrix;
                 if (gs.m_FrameCounter % gs.m_SortNthFrame == 0)
                     gs.SortPoints(cmb, cam, matrix);
                 ++gs.m_FrameCounter;
 
                 // cache view
-                kvp.Item2.Clear();
+                // 清空材质块缓存
+                materialPropertyBlock.Clear();
+                // 根据渲染模式选择渲染材质
                 Material displayMat = gs.m_RenderMode switch
                 {
                     GaussianSplatRenderer.RenderMode.DebugPoints => gs.m_MatDebugPoints,
@@ -138,42 +160,53 @@ namespace GaussianSplatting.Runtime
                     GaussianSplatRenderer.RenderMode.DebugChunkBounds => gs.m_MatDebugBoxes,
                     _ => gs.m_MatSplats
                 };
+                //若材质为空则跳过当前GS渲染器
                 if (displayMat == null)
                     continue;
 
-                gs.SetAssetDataOnMaterial(mpb);
-                mpb.SetBuffer(GaussianSplatRenderer.Props.SplatChunks, gs.m_GpuChunks);
-
-                mpb.SetBuffer(GaussianSplatRenderer.Props.SplatViewData, gs.m_GpuView);
-
-                mpb.SetBuffer(GaussianSplatRenderer.Props.OrderBuffer, gs.m_GpuSortKeys);
-                mpb.SetFloat(GaussianSplatRenderer.Props.SplatScale, gs.m_SplatScale);
-                mpb.SetFloat(GaussianSplatRenderer.Props.SplatOpacityScale, gs.m_OpacityScale);
-                mpb.SetFloat(GaussianSplatRenderer.Props.SplatSize, gs.m_PointDisplaySize);
-                mpb.SetInteger(GaussianSplatRenderer.Props.SHOrder, gs.m_SHOrder);
-                mpb.SetInteger(GaussianSplatRenderer.Props.SHOnly, gs.m_SHOnly ? 1 : 0);
-                mpb.SetInteger(GaussianSplatRenderer.Props.DisplayIndex,
+                // 设置很多属性到材质块中
+                // 我不知道为什么分成了两个部分？看起来是可以合到一起去的，这里面传输的都是单个gs的属性
+                gs.SetAssetDataOnMaterial(materialPropertyBlock);
+                // 高斯溅射的块数据、视图数据和排序键值
+                materialPropertyBlock.SetBuffer(GaussianSplatRenderer.Props.SplatChunks, gs.m_GpuChunks);
+                materialPropertyBlock.SetBuffer(GaussianSplatRenderer.Props.SplatViewData, gs.m_GpuView);
+                materialPropertyBlock.SetBuffer(GaussianSplatRenderer.Props.OrderBuffer, gs.m_GpuSortKeys);
+                //整体上的缩放、不透明度、单个GS的缩放、GS阶数、是否仅显示GS贡献、是否显示索引和块边界（调试模式）
+                materialPropertyBlock.SetFloat(GaussianSplatRenderer.Props.SplatScale, gs.m_SplatScale);
+                materialPropertyBlock.SetFloat(GaussianSplatRenderer.Props.SplatOpacityScale, gs.m_OpacityScale);
+                materialPropertyBlock.SetFloat(GaussianSplatRenderer.Props.SplatSize, gs.m_PointDisplaySize);
+                materialPropertyBlock.SetInteger(GaussianSplatRenderer.Props.SHOrder, gs.m_SHOrder);
+                materialPropertyBlock.SetInteger(GaussianSplatRenderer.Props.SHOnly, gs.m_SHOnly ? 1 : 0);
+                materialPropertyBlock.SetInteger(GaussianSplatRenderer.Props.DisplayIndex,
                     gs.m_RenderMode == GaussianSplatRenderer.RenderMode.DebugPointIndices ? 1 : 0);
-                mpb.SetInteger(GaussianSplatRenderer.Props.DisplayChunks,
+                materialPropertyBlock.SetInteger(GaussianSplatRenderer.Props.DisplayChunks,
                     gs.m_RenderMode == GaussianSplatRenderer.RenderMode.DebugChunkBounds ? 1 : 0);
 
+                //性能分析的上下两行
                 cmb.BeginSample(s_ProfCalcView);
+                //计算视图相关数据，包括每个GS点相对于相机的位置和方向
                 gs.CalcViewData(cmb, cam);
                 cmb.EndSample(s_ProfCalcView);
 
                 // draw
+                //索引计数为6表示绘制四边形（2个三角形）
                 int indexCount = 6;
+                //要绘制的GS数量
                 int instanceCount = gs.splatCount;
+                //使用三角形绘制
                 MeshTopology topology = MeshTopology.Triangles;
+                // 不同渲染模式的不同索引计数
                 if (gs.m_RenderMode is GaussianSplatRenderer.RenderMode.DebugBoxes
                     or GaussianSplatRenderer.RenderMode.DebugChunkBounds)
                     indexCount = 36;
                 if (gs.m_RenderMode == GaussianSplatRenderer.RenderMode.DebugChunkBounds)
                     instanceCount = gs.m_GpuChunksValid ? gs.m_GpuChunks.count : 0;
 
+                // 性能分析的上下两行
                 cmb.BeginSample(s_ProfDraw);
+                // 绘制GS
                 cmb.DrawProcedural(gs.m_GpuIndexBuffer, matrix, displayMat, 0, topology, indexCount, instanceCount,
-                    mpb);
+                    materialPropertyBlock);
                 cmb.EndSample(s_ProfDraw);
             }
 
@@ -182,47 +215,71 @@ namespace GaussianSplatting.Runtime
 
         // ReSharper disable once MemberCanBePrivate.Global - used by HDRP/URP features that are not always compiled
         // ReSharper disable once UnusedMethodReturnValue.Global - used by HDRP/URP features that are not always compiled
+        /// <summary>
+        /// 为相机创建初始清除命令缓冲区
+        /// </summary>
+        /// <param name="cam">相机</param>
+        /// <returns></returns>
         public CommandBuffer InitialClearCmdBuffer(Camera cam)
         {
+            // 如果没有实例化则创建一个新的命令缓冲区
             m_CommandBuffer ??= new CommandBuffer { name = "RenderGaussianSplats" };
+            // 检查当前是否没有使用任何渲染管线
+            // 确保相机对象 cam 不为 null，并且该相机尚未添加到 m_CameraCommandBuffersDone 集合中
             if (GraphicsSettings.currentRenderPipeline == null && cam != null &&
                 !m_CameraCommandBuffersDone.Contains(cam))
             {
+                // 添加到相机的命令缓冲区列表中，指定 CameraEvent.BeforeForwardAlpha 作为执行阶段
                 cam.AddCommandBuffer(CameraEvent.BeforeForwardAlpha, m_CommandBuffer);
+                // 将相机添加到已绑定命令缓冲区的相机列表中
                 m_CameraCommandBuffersDone.Add(cam);
             }
 
             // get render target for all splats
+            // 清除命令缓冲区以填充新的命令
             m_CommandBuffer.Clear();
             return m_CommandBuffer;
         }
 
+        /// <summary>
+        /// 相机在进行视野剔除之前的操作
+        /// </summary>
+        /// <param name="cam">相机</param>
         void OnPreCullCamera(Camera cam)
         {
+            //收集可见和有效的GS渲染器
             if (!GatherSplatsForCamera(cam))
                 return;
-
+            //初始化命令缓冲区
             InitialClearCmdBuffer(cam);
-
+            // 获取临时渲染目标用于渲染GS
             m_CommandBuffer.GetTemporaryRT(GaussianSplatRenderer.Props.GaussianSplatRT, -1, -1, 0, FilterMode.Point,
                 GraphicsFormat.R16G16B16A16_SFloat);
+            // 将命令缓冲区的渲染目标设置为刚刚获取的临时渲染目标
             m_CommandBuffer.SetRenderTarget(GaussianSplatRenderer.Props.GaussianSplatRT,
                 BuiltinRenderTextureType.CurrentActive);
+            // 清除渲染目标的颜色
             m_CommandBuffer.ClearRenderTarget(RTClearFlags.Color, new Color(0, 0, 0, 0), 0, 0);
 
             // We only need this to determine whether we're rendering into backbuffer or not. However, detection this
             // way only works in BiRP so only do it here.
+            // 设置全局纹理，用于确定是否渲染到后缓冲区。
             m_CommandBuffer.SetGlobalTexture(GaussianSplatRenderer.Props.CameraTargetTexture,
                 BuiltinRenderTextureType.CameraTarget);
 
             // add sorting, view calc and drawing commands for each splat object
+            // 添加排序、视图计算和绘制命令
             Material matComposite = SortAndRenderSplats(cam, m_CommandBuffer);
 
             // compose
+            // 性能采样
             m_CommandBuffer.BeginSample(s_ProfCompose);
+            // 将渲染目标设置回相机的目标纹理
             m_CommandBuffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+            // 将高斯溅射的合成结果绘制到相机的目标纹理
             m_CommandBuffer.DrawProcedural(Matrix4x4.identity, matComposite, 0, MeshTopology.Triangles, 3, 1);
             m_CommandBuffer.EndSample(s_ProfCompose);
+            // 释放之前获取的临时渲染目标，以避免资源浪费
             m_CommandBuffer.ReleaseTemporaryRT(GaussianSplatRenderer.Props.GaussianSplatRT);
         }
     }
@@ -397,14 +454,20 @@ namespace GaussianSplatting.Runtime
         public bool HasValidRenderSetup => m_GpuPosData != null && m_GpuOtherData != null && m_GpuChunks != null;
 
         const int kGpuViewDataSize = 40;
-        
 
+
+        /// <summary>
+        /// 为高斯溅射渲染系统创建必要的图形资源。包括图形缓冲区和纹理，
+        /// 用于存储高斯溅射的数据并在GPU上进行渲染。
+        /// </summary>
         void CreateResourcesForAsset()
         {
+            // 检查资产有效性
             if (!HasValidAsset)
                 return;
-
+            // 设置高斯溅射的数量，这个值从资产中获取
             m_SplatCount = asset.splatCount;
+            // 创建多个图形缓冲区来存储高斯溅射的位置数据、其他数据、SH数据，并从资产中获取数据初始化这个缓冲区
             m_GpuPosData = new GraphicsBuffer(GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource,
                 (int)(asset.posData.dataSize / 4), 4) { name = "GaussianPosData" };
             m_GpuPosData.SetData(asset.posData.GetData<uint>());
@@ -415,22 +478,32 @@ namespace GaussianSplatting.Runtime
             m_GpuSHData = new GraphicsBuffer(GraphicsBuffer.Target.Raw, (int)(asset.shData.dataSize / 4), 4)
                 { name = "GaussianSHData" };
             m_GpuSHData.SetData(asset.shData.GetData<uint>());
+            // 创建一个 Texture2D 来存储颜色数据，并从资产中获取数据初始化这个纹理
             var (texWidth, texHeight) = GaussianSplatAsset.CalcTextureSize(asset.splatCount);
+            // 将颜色格式转换为 Texture2D 可以理解的格式
             var texFormat = GaussianSplatAsset.ColorFormatToGraphics(asset.colorFormat);
+            // 创建纹理（不初始化像素、忽略Mipmap限制和不立即上传数据）
             var tex = new Texture2D(texWidth, texHeight, texFormat,
                 TextureCreationFlags.DontInitializePixels | TextureCreationFlags.IgnoreMipmapLimit |
                 TextureCreationFlags.DontUploadUponCreate) { name = "GaussianColorData" };
+            // 将颜色数据从资产中获取并设置到纹理中
             tex.SetPixelData(asset.colorData.GetData<byte>(), 0);
+            // 应用纹理设置
             tex.Apply(false, true);
+            // 存储纹理
             m_GpuColorData = tex;
+            // 检查资产是否有块数据
             if (asset.chunkData != null && asset.chunkData.dataSize != 0)
             {
+                // 如果有块数据，创建一个结构化图形缓冲区来存储这些数据，并从资产中获取数据初始化这个缓冲区
                 m_GpuChunks = new GraphicsBuffer(GraphicsBuffer.Target.Structured,
                     (int)(asset.chunkData.dataSize / UnsafeUtility.SizeOf<GaussianSplatAsset.ChunkInfo>()),
                     UnsafeUtility.SizeOf<GaussianSplatAsset.ChunkInfo>()) { name = "GaussianChunkData" };
                 m_GpuChunks.SetData(asset.chunkData.GetData<GaussianSplatAsset.ChunkInfo>());
+                // 表示块数据缓冲区包含有效数据
                 m_GpuChunksValid = true;
             }
+            // 否则初始化一个无效的缓冲区并标记
             else
             {
                 // just a dummy chunk buffer
@@ -438,10 +511,12 @@ namespace GaussianSplatting.Runtime
                     UnsafeUtility.SizeOf<GaussianSplatAsset.ChunkInfo>()) { name = "GaussianChunkData" };
                 m_GpuChunksValid = false;
             }
-
+            // 创建一个结构化图形缓冲区来存储每个高斯溅射的视图数据
             m_GpuView = new GraphicsBuffer(GraphicsBuffer.Target.Structured, m_Asset.splatCount, kGpuViewDataSize);
+            // 存储绘制高斯溅射所需的索引数据(一个正方体的六个面)
             m_GpuIndexBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Index, 36, 2);
             // cube indices, most often we use only the first quad
+            // 定义了一个立方体的六个面，每个面由两个三角形组成
             m_GpuIndexBuffer.SetData(new ushort[]
             {
                 0, 1, 2, 1, 3, 2,
@@ -451,33 +526,42 @@ namespace GaussianSplatting.Runtime
                 0, 4, 1, 4, 5, 1,
                 2, 3, 6, 3, 7, 6
             });
-
+            // 初始化排序缓冲区
             InitSortBuffers(splatCount);
         }
 
+        /// <summary>
+        /// 初始化排序图形缓冲区
+        /// </summary>
+        /// <param name="count">GS数量</param>
         void InitSortBuffers(int count)
         {
+            // 释放旧缓冲区
             m_GpuSortDistances?.Dispose();
             m_GpuSortKeys?.Dispose();
             m_SorterArgs.resources.Dispose();
-
+            // 确保排序器已经创建和注册
             EnsureSorterAndRegister();
-
+            // 创建用于存储排序距离和排序索引的缓冲区
             m_GpuSortDistances = new GraphicsBuffer(GraphicsBuffer.Target.Structured, count, 4)
                 { name = "GaussianSplatSortDistances" };
             m_GpuSortKeys = new GraphicsBuffer(GraphicsBuffer.Target.Structured, count, 4)
                 { name = "GaussianSplatSortIndices" };
 
             // init keys buffer to splat indices
+            // 将缓冲区绑定到计算着色器的相应槽位并设置高斯溅射数量
             m_CSSplatUtilities.SetBuffer((int)KernelIndices.SetIndices, Props.SplatSortKeys, m_GpuSortKeys);
             m_CSSplatUtilities.SetInt(Props.SplatCount, m_GpuSortDistances.count);
+            // 获取核线程组数量
             m_CSSplatUtilities.GetKernelThreadGroupSizes((int)KernelIndices.SetIndices, out uint gsX, out _, out _);
+            //执行计算着色器的方法"SetIndices"初始化索引缓冲区
             m_CSSplatUtilities.Dispatch((int)KernelIndices.SetIndices,
                 (m_GpuSortDistances.count + (int)gsX - 1) / (int)gsX, 1, 1);
-
+            // 将参数填充进排序器属性
             m_SorterArgs.inputKeys = m_GpuSortDistances;
             m_SorterArgs.inputValues = m_GpuSortKeys;
             m_SorterArgs.count = (uint)count;
+            // 如果排序器有效，则加载支持资源以供排序器使用
             if (m_Sorter.Valid)
                 m_SorterArgs.resources = GpuSorting.SupportResources.Load((uint)count);
         }
@@ -486,6 +570,9 @@ namespace GaussianSplatting.Runtime
                                   m_ShaderDebugBoxes != null && m_CSSplatUtilities != null &&
                                   SystemInfo.supportsComputeShaders;
 
+        /// <summary>
+        /// 确保所有所需材质都已经创建
+        /// </summary>
         public void EnsureMaterials()
         {
             if (m_MatSplats == null && resourcesAreSetUp)
@@ -497,13 +584,17 @@ namespace GaussianSplatting.Runtime
             }
         }
 
+        /// <summary>
+        /// 确保排序器已创建并注册
+        /// </summary>
         public void EnsureSorterAndRegister()
         {
+            // 创建排序器
             if (m_Sorter == null && resourcesAreSetUp)
             {
                 m_Sorter = new GpuSorting(m_CSSplatUtilities);
             }
-
+            //在GS渲染系统中注册当前GS渲染器
             if (!m_Registered && resourcesAreSetUp)
             {
                 GaussianSplatRenderSystem.instance.RegisterSplat(this);
@@ -549,6 +640,10 @@ namespace GaussianSplatting.Runtime
             cmb.SetComputeBufferParam(cs, kernelIndex, Props.SplatCutouts, m_GpuEditCutouts);
         }
 
+        /// <summary>
+        /// 将当前GS的数据设置到所给的材质块中
+        /// </summary>
+        /// <param name="mat">要设置的材质块</param>
         internal void SetAssetDataOnMaterial(MaterialPropertyBlock mat)
         {
             mat.SetBuffer(Props.SplatPos, m_GpuPosData);
@@ -650,8 +745,15 @@ namespace GaussianSplatting.Runtime
                 (m_GpuView.count + (int)gsX - 1) / (int)gsX, 1, 1);
         }
 
+        /// <summary>
+        /// 根据相机位置对GS进行排序，确保由远到近渲染
+        /// </summary>
+        /// <param name="cmd">命令缓冲</param>
+        /// <param name="cam">相机</param>
+        /// <param name="matrix">局部到世界坐标转换矩阵</param>
         internal void SortPoints(CommandBuffer cmd, Camera cam, Matrix4x4 matrix)
         {
+            // 如果相机类型是预览则直接返回，不进行排序操作
             if (cam.cameraType == CameraType.Preview)
                 return;
 
@@ -661,6 +763,7 @@ namespace GaussianSplatting.Runtime
             worldToCamMatrix.m22 *= -1;
 
             // calculate distance to the camera for each splat
+            // 设置计算着色器的参数，包括溅射点的位置缓冲区、排序键值缓冲区、块数据缓冲区等
             cmd.BeginSample(s_ProfSort);
             cmd.SetComputeBufferParam(m_CSSplatUtilities, (int)KernelIndices.CalcDistances, Props.SplatSortDistances,
                 m_GpuSortDistances);
@@ -680,6 +783,7 @@ namespace GaussianSplatting.Runtime
 
             // sort the splats
             EnsureSorterAndRegister();
+            // 执行GPU排序
             m_Sorter.Dispatch(cmd, m_SorterArgs);
             cmd.EndSample(s_ProfSort);
         }
