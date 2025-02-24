@@ -602,6 +602,9 @@ namespace GaussianSplatting.Runtime
             }
         }
 
+        /// <summary>
+        /// 当插件启用时调用
+        /// </summary>
         public void OnEnable()
         {
             m_FrameCounter = 0;

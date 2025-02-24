@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using GaussianSplatting.Runtime;
 using UnityEngine;
@@ -24,6 +25,7 @@ namespace GSTestScene
 
         // 检查当前鼠标状态能否与场景交互
         public static bool isInteractive { get; private set; } = true;
+
         //查看器模式改变时触发回调
         public static event EventHandler<Mode> ModeChanged;
 
@@ -40,12 +42,18 @@ namespace GSTestScene
                 ModeChanged?.Invoke(_mode, value);
             }
         }
-        
 
-        private void Awake()
-        {
-            mode = Mode.View;
-        }
+        private static bool isInEditingMode = true;
+
+        //场景文件保存路径
+        public const string SceneFileName = "GaussianAssets";
+
+        public static string sceneFileRoot => isInEditingMode
+            ? Path.Join(Application.dataPath, "Resources", SceneFileName)
+            : Path.Join(Application.persistentDataPath, SceneFileName);
+
+        // 刚切换场景时需要加载的GS资产
+        public static List<GaussianSplatAsset> GaussianSplatAssets=new(); 
 
         public static void UpdateRotateSensitivity(float value)
         {

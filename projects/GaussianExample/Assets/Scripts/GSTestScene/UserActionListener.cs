@@ -22,7 +22,7 @@ namespace GSTestScene
         public Vector2 mouseStartDragPos = Vector2.zero; //记录鼠标开始拖动时的坐标
 
 
-        private void Awake()
+        private void OnEnable()
         {
             //获取gs渲染对象
             _gsRenderer = gaussianSplats.GetComponent<GaussianSplatRenderer>();
