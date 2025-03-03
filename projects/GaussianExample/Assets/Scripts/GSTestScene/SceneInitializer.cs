@@ -27,6 +27,7 @@ namespace GSTestScene
 
             GetComponent<UIManager>().enabled = true;
             GetComponent<UserActionListener>().enabled = true;
+            Status.SwitchViewMode();
         }
     }
 }

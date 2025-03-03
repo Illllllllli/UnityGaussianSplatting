@@ -29,7 +29,7 @@ namespace GSTestScene
         //查看器模式改变时触发回调
         public static event EventHandler<Mode> ModeChanged;
 
-        private static Mode _mode;
+        private static Mode _mode = Mode.None;
 
         //查看器模式（浏览/选择/编辑）
         public static Mode mode
@@ -53,7 +53,10 @@ namespace GSTestScene
             : Path.Join(Application.persistentDataPath, SceneFileName);
 
         // 刚切换场景时需要加载的GS资产
-        public static List<GaussianSplatAsset> GaussianSplatAssets=new(); 
+        public static List<GaussianSplatAsset> GaussianSplatAssets = new();
+        
+        // 导出时是否烘焙变换（世界空间）
+        public static bool ExportBakeTransform = true;
 
         public static void UpdateRotateSensitivity(float value)
         {
@@ -92,6 +95,7 @@ namespace GSTestScene
 
     public enum Mode
     {
+        None,
         View,
         Select,
         Edit

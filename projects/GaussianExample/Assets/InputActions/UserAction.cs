@@ -55,7 +55,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""initialStateCheck"": false
                 },
                 {
-                    ""name"": ""SwitchSelectMode"",
+                    ""name"": ""Switch Select Mode"",
                     ""type"": ""Button"",
                     ""id"": ""65d9935d-b6f5-4b62-82e1-dc8317e07640"",
                     ""expectedControlType"": ""Button"",
@@ -125,6 +125,24 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""Ctrl I"",
+                    ""type"": ""Button"",
+                    ""id"": ""24977481-d413-48b2-be53-e600a309ac6a"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""Ctrl A"",
+                    ""type"": ""Button"",
+                    ""id"": ""59c61610-5488-42f0-8537-4d5326708c6e"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
                 }
             ],
             ""bindings"": [
@@ -157,7 +175,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""interactions"": ""Press"",
                     ""processors"": """",
                     ""groups"": """",
-                    ""action"": ""SwitchSelectMode"",
+                    ""action"": ""Switch Select Mode"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
                 },
@@ -248,6 +266,72 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""action"": ""Q key"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": ""One Modifier"",
+                    ""id"": ""5d1b7142-ab11-4aec-bbd5-4614ed78ed66"",
+                    ""path"": ""OneModifier"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Ctrl I"",
+                    ""isComposite"": true,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": ""Modifier"",
+                    ""id"": ""58d76810-476c-40c5-b5db-ef2fc1fdb59e"",
+                    ""path"": ""<Keyboard>/ctrl"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Ctrl I"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""Binding"",
+                    ""id"": ""420fb71f-e8b2-40d2-9af4-5d5882a94cab"",
+                    ""path"": ""<Keyboard>/i"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Ctrl I"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""One Modifier"",
+                    ""id"": ""e54db195-26bf-48b1-87ee-fb3e8415c350"",
+                    ""path"": ""OneModifier"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Ctrl A"",
+                    ""isComposite"": true,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": ""Modifier"",
+                    ""id"": ""39ac12ca-d2b5-4e5f-8f8f-7f52e14c2207"",
+                    ""path"": ""<Keyboard>/ctrl"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Ctrl A"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""Binding"",
+                    ""id"": ""756a4654-6f1f-420e-9190-3c165578209e"",
+                    ""path"": ""<Keyboard>/a"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Ctrl A"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
                 }
             ]
         }
@@ -259,7 +343,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         m_Player_MouseLeftClick = m_Player.FindAction("Mouse Left Click", throwIfNotFound: true);
         m_Player_MouseMovement = m_Player.FindAction("Mouse Movement", throwIfNotFound: true);
         m_Player_SwitchViewMode = m_Player.FindAction("Switch View Mode", throwIfNotFound: true);
-        m_Player_SwitchSelectMode = m_Player.FindAction("SwitchSelectMode", throwIfNotFound: true);
+        m_Player_SwitchSelectMode = m_Player.FindAction("Switch Select Mode", throwIfNotFound: true);
         m_Player_SwitchEditMode = m_Player.FindAction("Switch Edit Mode", throwIfNotFound: true);
         m_Player_Wkey = m_Player.FindAction("W key", throwIfNotFound: true);
         m_Player_Akey = m_Player.FindAction("A key", throwIfNotFound: true);
@@ -267,6 +351,8 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         m_Player_Dkey = m_Player.FindAction("D key", throwIfNotFound: true);
         m_Player_Ekey = m_Player.FindAction("E key", throwIfNotFound: true);
         m_Player_Qkey = m_Player.FindAction("Q key", throwIfNotFound: true);
+        m_Player_CtrlI = m_Player.FindAction("Ctrl I", throwIfNotFound: true);
+        m_Player_CtrlA = m_Player.FindAction("Ctrl A", throwIfNotFound: true);
     }
 
     public void Dispose()
@@ -339,6 +425,8 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
     private readonly InputAction m_Player_Dkey;
     private readonly InputAction m_Player_Ekey;
     private readonly InputAction m_Player_Qkey;
+    private readonly InputAction m_Player_CtrlI;
+    private readonly InputAction m_Player_CtrlA;
     public struct PlayerActions
     {
         private @UserAction m_Wrapper;
@@ -354,6 +442,8 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         public InputAction @Dkey => m_Wrapper.m_Player_Dkey;
         public InputAction @Ekey => m_Wrapper.m_Player_Ekey;
         public InputAction @Qkey => m_Wrapper.m_Player_Qkey;
+        public InputAction @CtrlI => m_Wrapper.m_Player_CtrlI;
+        public InputAction @CtrlA => m_Wrapper.m_Player_CtrlA;
         public InputActionMap Get() { return m_Wrapper.m_Player; }
         public void Enable() { Get().Enable(); }
         public void Disable() { Get().Disable(); }
@@ -396,6 +486,12 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
             @Qkey.started += instance.OnQkey;
             @Qkey.performed += instance.OnQkey;
             @Qkey.canceled += instance.OnQkey;
+            @CtrlI.started += instance.OnCtrlI;
+            @CtrlI.performed += instance.OnCtrlI;
+            @CtrlI.canceled += instance.OnCtrlI;
+            @CtrlA.started += instance.OnCtrlA;
+            @CtrlA.performed += instance.OnCtrlA;
+            @CtrlA.canceled += instance.OnCtrlA;
         }
 
         private void UnregisterCallbacks(IPlayerActions instance)
@@ -433,6 +529,12 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
             @Qkey.started -= instance.OnQkey;
             @Qkey.performed -= instance.OnQkey;
             @Qkey.canceled -= instance.OnQkey;
+            @CtrlI.started -= instance.OnCtrlI;
+            @CtrlI.performed -= instance.OnCtrlI;
+            @CtrlI.canceled -= instance.OnCtrlI;
+            @CtrlA.started -= instance.OnCtrlA;
+            @CtrlA.performed -= instance.OnCtrlA;
+            @CtrlA.canceled -= instance.OnCtrlA;
         }
 
         public void RemoveCallbacks(IPlayerActions instance)
@@ -463,5 +565,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         void OnDkey(InputAction.CallbackContext context);
         void OnEkey(InputAction.CallbackContext context);
         void OnQkey(InputAction.CallbackContext context);
+        void OnCtrlI(InputAction.CallbackContext context);
+        void OnCtrlA(InputAction.CallbackContext context);
     }
 }

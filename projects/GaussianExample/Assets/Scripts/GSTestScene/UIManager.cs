@@ -1,4 +1,5 @@
 using System;
+using GaussianSplatting.Editor;
 using GaussianSplatting.Runtime;
 using UnityEngine;
 using UnityEngine.UI;
@@ -14,6 +15,7 @@ namespace GSTestScene
         public Button viewButton;
         public Button selectButton;
         public Button editButton;
+        public Button exportButton;
 
         private static readonly Color DisableColor = Color.white;
         private static readonly Color EnableColor = new Color(0.5f, 0.72f, 0.79f);
@@ -27,7 +29,7 @@ namespace GSTestScene
             viewButton.onClick.AddListener(Status.SwitchViewMode);
             selectButton.onClick.AddListener(Status.SwitchSelectMode);
             editButton.onClick.AddListener(Status.SwitchEditMode);
-
+            exportButton.onClick.AddListener(() => GaussianSplatRendererEditor.ExportPlyFile(_gsRenderer, false));
             //配置滚动条属性
             Slider[] sliders = uiCanvas.GetComponentsInChildren<Slider>();
             foreach (var slider in sliders)

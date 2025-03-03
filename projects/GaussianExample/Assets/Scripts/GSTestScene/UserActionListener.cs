@@ -21,14 +21,11 @@ namespace GSTestScene
         private UserAction _userAction;
         public Vector2 mouseStartDragPos = Vector2.zero; //记录鼠标开始拖动时的坐标
 
-
-        private void OnEnable()
+        /// <summary>
+        /// 绑定鼠标输入
+        /// </summary>
+        private void BindMouseInput()
         {
-            //获取gs渲染对象
-            _gsRenderer = gaussianSplats.GetComponent<GaussianSplatRenderer>();
-            // 初始化
-            _userAction = new UserAction();
-            _userAction.Enable();
             // 鼠标左键按下
             _userAction.Player.MouseLeftClick.performed += ctx =>
             {
@@ -63,23 +60,6 @@ namespace GSTestScene
 
                 Debug.Log("point up");
             };
-            //切换模式
-            _userAction.Player.SwitchViewMode.performed += ctx => { Status.SwitchViewMode(); };
-            _userAction.Player.SwitchSelectMode.performed += ctx => { Status.SwitchSelectMode(); };
-            _userAction.Player.SwitchEditMode.performed += ctx => { Status.SwitchEditMode(); };
-            //移动视角(x,y,z分别为左右，上下，前后)
-            _userAction.Player.Akey.performed += ctx => _cameraMovement.x--;
-            _userAction.Player.Akey.canceled += ctx => _cameraMovement.x++;
-            _userAction.Player.Dkey.performed += ctx => _cameraMovement.x++;
-            _userAction.Player.Dkey.canceled += ctx => _cameraMovement.x--;
-            _userAction.Player.Wkey.performed += ctx => _cameraMovement.z++;
-            _userAction.Player.Wkey.canceled += ctx => _cameraMovement.z--;
-            _userAction.Player.Skey.performed += ctx => _cameraMovement.z--;
-            _userAction.Player.Skey.canceled += ctx => _cameraMovement.z++;
-            _userAction.Player.Ekey.performed += ctx => _cameraMovement.y++;
-            _userAction.Player.Ekey.canceled += ctx => _cameraMovement.y--;
-            _userAction.Player.Qkey.performed += ctx => _cameraMovement.y--;
-            _userAction.Player.Qkey.canceled += ctx => _cameraMovement.y++;
             // 监听鼠标移动
             _userAction.Player.MouseMovement.performed += ctx =>
             {
@@ -123,6 +103,69 @@ namespace GSTestScene
                     mainCamera.transform.localEulerAngles = angles;
                 }
             };
+        }
+        /// <summary>
+        /// 绑定模式切换输入
+        /// </summary>
+        private void BindModeChangeInput()
+        {
+            //切换模式
+            _userAction.Player.SwitchViewMode.performed += ctx => { Status.SwitchViewMode(); };
+            _userAction.Player.SwitchSelectMode.performed += ctx => { Status.SwitchSelectMode(); };
+            _userAction.Player.SwitchEditMode.performed += ctx => { Status.SwitchEditMode(); };
+        }
+        /// <summary>
+        /// 绑定移动输入
+        /// </summary>
+        private void BindMovementInput()
+        {
+            //移动视角(x,y,z分别为左右，上下，前后)
+            _userAction.Player.Akey.performed += ctx => _cameraMovement.x--;
+            _userAction.Player.Akey.canceled += ctx => _cameraMovement.x++;
+            _userAction.Player.Dkey.performed += ctx => _cameraMovement.x++;
+            _userAction.Player.Dkey.canceled += ctx => _cameraMovement.x--;
+            _userAction.Player.Wkey.performed += ctx => _cameraMovement.z++;
+            _userAction.Player.Wkey.canceled += ctx => _cameraMovement.z--;
+            _userAction.Player.Skey.performed += ctx => _cameraMovement.z--;
+            _userAction.Player.Skey.canceled += ctx => _cameraMovement.z++;
+            _userAction.Player.Ekey.performed += ctx => _cameraMovement.y++;
+            _userAction.Player.Ekey.canceled += ctx => _cameraMovement.y--;
+            _userAction.Player.Qkey.performed += ctx => _cameraMovement.y--;
+            _userAction.Player.Qkey.canceled += ctx => _cameraMovement.y++;
+        }
+        
+        /// <summary>
+        /// 绑定快捷编辑功能（如Ctrl+A,Ctrl+I)
+        /// </summary>
+        private void BindSelectFuncInput()
+        {
+            _userAction.Player.CtrlI.performed += ctx =>
+            {
+                if (Status.mode == Mode.Select)
+                {
+                    _gsRenderer.EditInvertSelection();
+                }
+            };
+            _userAction.Player.CtrlA.performed += ctx =>
+            {
+                if (Status.mode == Mode.Select)
+                {
+                    _gsRenderer.EditSelectAll();
+                }
+            };
+        }
+        
+        private void OnEnable()
+        {
+            //获取gs渲染对象
+            _gsRenderer = gaussianSplats.GetComponent<GaussianSplatRenderer>();
+            // 初始化
+            _userAction = new UserAction();
+            _userAction.Enable();
+            BindMouseInput();
+            BindModeChangeInput();
+            BindMovementInput();
+            BindSelectFuncInput();
         }
 
 

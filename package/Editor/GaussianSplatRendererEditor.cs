@@ -241,7 +241,9 @@ namespace GaussianSplatting.Editor
             DrawSeparator();
             bool wasToolActive = ToolManager.activeContextType == typeof(GaussianToolContext);
             GUILayout.BeginHorizontal();
+            // 编辑按钮
             bool isToolActive = GUILayout.Toggle(wasToolActive, "Edit", EditorStyles.miniButton);
+            // 重置按钮
             using (new EditorGUI.DisabledScope(!gs.editModified))
             {
                 if (GUILayout.Button("Reset", GUILayout.ExpandWidth(false)))
@@ -257,6 +259,7 @@ namespace GaussianSplatting.Editor
             }
 
             GUILayout.EndHorizontal();
+            // 切换到编辑工具模式（仅在编辑器模式下可用）
             if (!wasToolActive && isToolActive)
             {
                 ToolManager.SetActiveContext<GaussianToolContext>();
@@ -391,7 +394,7 @@ namespace GaussianSplatting.Editor
             return new Bounds { center = center, extents = ext };
         }
 
-        static unsafe void ExportPlyFile(GaussianSplatRenderer gs, bool bakeTransform)
+        public static unsafe void ExportPlyFile(GaussianSplatRenderer gs, bool bakeTransform)
         {
             var path = EditorUtility.SaveFilePanel(
                 "Export Gaussian Splat PLY file", "", $"{gs.asset.name}-edit.ply", "ply");
