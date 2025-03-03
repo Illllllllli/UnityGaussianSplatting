@@ -143,6 +143,33 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""Ctrl Shift A"",
+                    ""type"": ""Button"",
+                    ""id"": ""f5b1ad2e-cb5f-4dec-a2e1-0ddde6f1ec14"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""Delete"",
+                    ""type"": ""Button"",
+                    ""id"": ""71bd87d3-7b0b-467a-b726-31788a2e57f6"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""G key"",
+                    ""type"": ""Value"",
+                    ""id"": ""2b45573f-6a46-4f27-9c9a-2bea2040cb63"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": true
                 }
             ],
             ""bindings"": [
@@ -332,6 +359,72 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""action"": ""Ctrl A"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""Two Modifiers"",
+                    ""id"": ""9e1c37d8-ab13-4e61-a24c-5f6db22733df"",
+                    ""path"": ""TwoModifiers"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Ctrl Shift A"",
+                    ""isComposite"": true,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": ""modifier2"",
+                    ""id"": ""a197b986-b391-45d9-a487-a3e2e99bc1e3"",
+                    ""path"": ""<Keyboard>/ctrl"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Ctrl Shift A"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""modifier1"",
+                    ""id"": ""8c3002ea-86a8-49fc-8f6f-1c7a38d6f3a5"",
+                    ""path"": ""<Keyboard>/shift"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Ctrl Shift A"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": ""Binding"",
+                    ""id"": ""fb9188ff-6896-4483-ae6c-c544268246e6"",
+                    ""path"": ""<Keyboard>/a"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Ctrl Shift A"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": true
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""cf41eff6-8e23-46fa-bfa7-535657709919"",
+                    ""path"": ""<Keyboard>/delete"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Delete"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""f29da3b0-196e-49b4-94ee-04aaeaac70ca"",
+                    ""path"": ""<Keyboard>/g"",
+                    ""interactions"": ""Press"",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""G key"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
                 }
             ]
         }
@@ -353,6 +446,9 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         m_Player_Qkey = m_Player.FindAction("Q key", throwIfNotFound: true);
         m_Player_CtrlI = m_Player.FindAction("Ctrl I", throwIfNotFound: true);
         m_Player_CtrlA = m_Player.FindAction("Ctrl A", throwIfNotFound: true);
+        m_Player_CtrlShiftA = m_Player.FindAction("Ctrl Shift A", throwIfNotFound: true);
+        m_Player_Delete = m_Player.FindAction("Delete", throwIfNotFound: true);
+        m_Player_Gkey = m_Player.FindAction("G key", throwIfNotFound: true);
     }
 
     public void Dispose()
@@ -427,6 +523,9 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
     private readonly InputAction m_Player_Qkey;
     private readonly InputAction m_Player_CtrlI;
     private readonly InputAction m_Player_CtrlA;
+    private readonly InputAction m_Player_CtrlShiftA;
+    private readonly InputAction m_Player_Delete;
+    private readonly InputAction m_Player_Gkey;
     public struct PlayerActions
     {
         private @UserAction m_Wrapper;
@@ -444,6 +543,9 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         public InputAction @Qkey => m_Wrapper.m_Player_Qkey;
         public InputAction @CtrlI => m_Wrapper.m_Player_CtrlI;
         public InputAction @CtrlA => m_Wrapper.m_Player_CtrlA;
+        public InputAction @CtrlShiftA => m_Wrapper.m_Player_CtrlShiftA;
+        public InputAction @Delete => m_Wrapper.m_Player_Delete;
+        public InputAction @Gkey => m_Wrapper.m_Player_Gkey;
         public InputActionMap Get() { return m_Wrapper.m_Player; }
         public void Enable() { Get().Enable(); }
         public void Disable() { Get().Disable(); }
@@ -492,6 +594,15 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
             @CtrlA.started += instance.OnCtrlA;
             @CtrlA.performed += instance.OnCtrlA;
             @CtrlA.canceled += instance.OnCtrlA;
+            @CtrlShiftA.started += instance.OnCtrlShiftA;
+            @CtrlShiftA.performed += instance.OnCtrlShiftA;
+            @CtrlShiftA.canceled += instance.OnCtrlShiftA;
+            @Delete.started += instance.OnDelete;
+            @Delete.performed += instance.OnDelete;
+            @Delete.canceled += instance.OnDelete;
+            @Gkey.started += instance.OnGkey;
+            @Gkey.performed += instance.OnGkey;
+            @Gkey.canceled += instance.OnGkey;
         }
 
         private void UnregisterCallbacks(IPlayerActions instance)
@@ -535,6 +646,15 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
             @CtrlA.started -= instance.OnCtrlA;
             @CtrlA.performed -= instance.OnCtrlA;
             @CtrlA.canceled -= instance.OnCtrlA;
+            @CtrlShiftA.started -= instance.OnCtrlShiftA;
+            @CtrlShiftA.performed -= instance.OnCtrlShiftA;
+            @CtrlShiftA.canceled -= instance.OnCtrlShiftA;
+            @Delete.started -= instance.OnDelete;
+            @Delete.performed -= instance.OnDelete;
+            @Delete.canceled -= instance.OnDelete;
+            @Gkey.started -= instance.OnGkey;
+            @Gkey.performed -= instance.OnGkey;
+            @Gkey.canceled -= instance.OnGkey;
         }
 
         public void RemoveCallbacks(IPlayerActions instance)
@@ -567,5 +687,8 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         void OnQkey(InputAction.CallbackContext context);
         void OnCtrlI(InputAction.CallbackContext context);
         void OnCtrlA(InputAction.CallbackContext context);
+        void OnCtrlShiftA(InputAction.CallbackContext context);
+        void OnDelete(InputAction.CallbackContext context);
+        void OnGkey(InputAction.CallbackContext context);
     }
 }

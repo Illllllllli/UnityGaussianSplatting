@@ -1,8 +1,10 @@
 using System;
 using GaussianSplatting.Editor;
 using GaussianSplatting.Runtime;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using Object = System.Object;
 
 namespace GSTestScene
 {
@@ -10,12 +12,28 @@ namespace GSTestScene
     {
         public GameObject gaussianSplats;
         public GameObject uiCanvas;
+        private event EventHandler<GaussianSplatRenderer> OnCurrentGsRendererChanged;
         private GaussianSplatRenderer _gsRenderer;
+        private GaussianSplatRenderer gsRenderer
+        {
+            get => _gsRenderer;
+            set
+            {
+                if (_gsRenderer == value) return;
+                _gsRenderer = value;
+                OnCurrentGsRendererChanged?.Invoke(this, value);
+            }
+        }
 
+        // 功能按钮
         public Button viewButton;
         public Button selectButton;
         public Button editButton;
+
         public Button exportButton;
+
+        // 标识GS数量
+        public TextMeshProUGUI splatCountText;
 
         private static readonly Color DisableColor = Color.white;
         private static readonly Color EnableColor = new Color(0.5f, 0.72f, 0.79f);
@@ -24,12 +42,12 @@ namespace GSTestScene
         private void Start()
         {
             //绑定gs对象
-            _gsRenderer = gaussianSplats.GetComponent<GaussianSplatRenderer>();
+            gsRenderer = gaussianSplats.GetComponent<GaussianSplatRenderer>();
             //配置按钮功能
             viewButton.onClick.AddListener(Status.SwitchViewMode);
             selectButton.onClick.AddListener(Status.SwitchSelectMode);
             editButton.onClick.AddListener(Status.SwitchEditMode);
-            exportButton.onClick.AddListener(() => GaussianSplatRendererEditor.ExportPlyFile(_gsRenderer, false));
+            exportButton.onClick.AddListener(ExportPlyFile);
             //配置滚动条属性
             Slider[] sliders = uiCanvas.GetComponentsInChildren<Slider>();
             foreach (var slider in sliders)
@@ -47,40 +65,80 @@ namespace GSTestScene
                 }
             }
 
+            // 配置场景信息实时更新
+            GaussianSplatRenderer.onSplatCountChanged += UpdateSplatInfo;
+            GaussianSplatRenderer.onEditSselectedSplatsChanged += UpdateSplatInfo;
             // 切换模式时按钮样式调整
-            Status.ModeChanged += (_, mode) =>
+            Status.PlayModeChanged += (_, mode) =>
             {
                 switch (mode)
                 {
-                    case Mode.Edit:
+                    case PlayMode.Edit:
                         SetButtonColor(viewButton, DisableColor);
                         SetButtonColor(selectButton, DisableColor);
                         SetButtonColor(editButton, EnableColor);
                         break;
-                    case Mode.Select:
+                    case PlayMode.Select:
                         SetButtonColor(viewButton, DisableColor);
                         SetButtonColor(selectButton, EnableColor);
                         SetButtonColor(editButton, DisableColor);
                         break;
-                    case Mode.View:
+                    case PlayMode.View:
                         SetButtonColor(viewButton, EnableColor);
                         SetButtonColor(selectButton, DisableColor);
                         SetButtonColor(editButton, DisableColor);
                         break;
 
+                    case PlayMode.None:
                     default:
-                        throw new ArgumentOutOfRangeException(nameof(mode), mode, null);
+                        break;
                 }
             };
             //切换到浏览模式
             Status.SwitchViewMode();
+            //初始化场景信息
+            UpdateSplatInfo(gsRenderer,EventArgs.Empty);
         }
 
-        //更换按钮颜色
+        /// <summary>
+        /// 更换按钮颜色
+        /// </summary>
+        /// <param name="button">对应按钮</param>
+        /// <param name="color">颜色</param>
         private static void SetButtonColor(Button button, Color color)
         {
-            Debug.Log(button);
+            if(!button)return;
             button.GetComponent<Image>().color = color;
+        }
+
+        /// <summary>
+        /// 更新相关信息(GS数量等)
+        /// </summary>
+        private void UpdateSplatInfo(Object obj, EventArgs _)
+        {
+            GaussianSplatRenderer gaussianSplatRenderer = obj as GaussianSplatRenderer;
+            splatCountText.SetText(
+                $"Splat Count \n Selected / Total : {gaussianSplatRenderer?.editSelectedSplats} / {gaussianSplatRenderer?.splatCount}");
+        }
+
+        /// <summary>
+        /// 导出当前活动的GS为点云文件
+        /// </summary>
+        private void ExportPlyFile()
+        {
+            GaussianSplatRendererEditor.ExportPlyFile(gsRenderer,false);
+        }
+
+        /// <summary>
+        /// 解除所有监听
+        /// </summary>
+        private void OnDestroy()
+        {
+           // editButton.onClick.RemoveAllListeners();
+           // viewButton.onClick.RemoveAllListeners();
+           // selectButton.onClick.RemoveAllListeners();
+           // exportButton.onClick.RemoveAllListeners();
+           
         }
     }
 }

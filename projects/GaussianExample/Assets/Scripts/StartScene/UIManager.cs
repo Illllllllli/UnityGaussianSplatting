@@ -63,6 +63,13 @@ namespace StartScene
             }
         }
 
+        // private void OnDestroy()
+        // {
+        //     createButton.onClick.RemoveAllListeners();
+        //     loadButton.onClick.RemoveAllListeners();
+        //     exitButton.onClick.RemoveAllListeners();
+        // }
+
         /// <summary>
         /// 退出游戏
         /// </summary>

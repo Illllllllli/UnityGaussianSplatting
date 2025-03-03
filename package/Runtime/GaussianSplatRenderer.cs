@@ -11,6 +11,7 @@ using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using UnityEngine.XR;
+using Object = UnityEngine.Object;
 
 namespace GaussianSplatting.Runtime
 {
@@ -331,7 +332,24 @@ namespace GaussianSplatting.Runtime
         [Tooltip("Gaussian splatting compute shader")]
         public ComputeShader m_CSSplatUtilities;
 
-        int m_SplatCount; // initially same as asset splat count, but editing can change this
+        // 需要在UI上实时更新信息。所以在这里加两个回调
+        public static event EventHandler onEditSselectedSplatsChanged;
+        public static event EventHandler onSplatCountChanged;
+
+        // 二层属性
+        private int _m_SplatCount;
+
+        private int m_SplatCount
+        {
+            get => _m_SplatCount;
+            set
+            {
+                if (m_SplatCount == value) return;
+                _m_SplatCount = value;
+                onSplatCountChanged?.Invoke(this,EventArgs.Empty);
+            }
+        } // initially same as asset splat count, but editing can change this
+
         GraphicsBuffer m_GpuSortDistances;
         internal GraphicsBuffer m_GpuSortKeys;
         GraphicsBuffer m_GpuPosData;
@@ -409,18 +427,34 @@ namespace GaussianSplatting.Runtime
             public static readonly int SplatCutouts = Shader.PropertyToID("_SplatCutouts");
             public static readonly int SelectionMode = Shader.PropertyToID("_SelectionMode");
             public static readonly int SplatPosMouseDown = Shader.PropertyToID("_SplatPosMouseDown");
+
             public static readonly int SplatOtherMouseDown = Shader.PropertyToID("_SplatOtherMouseDown");
 
+            // 新增的属性
             public static readonly int MatrixVP = Shader.PropertyToID("_MatrixVP");
         }
 
+
         [field: NonSerialized] public bool editModified { get; private set; }
-        [field: NonSerialized] public uint editSelectedSplats { get; private set; }
+        
+        public uint editSelectedSplats
+        {
+            get => m_EditSelectedSplats;
+            private set
+            {
+                if (editSelectedSplats == value) return;
+                m_EditSelectedSplats = value;
+                onEditSselectedSplatsChanged?.Invoke(this,EventArgs.Empty);
+            }
+        }
+
         [field: NonSerialized] public uint editDeletedSplats { get; private set; }
         [field: NonSerialized] public uint editCutSplats { get; private set; }
         [field: NonSerialized] public Bounds editSelectedBounds { get; private set; }
 
         public GaussianSplatAsset asset => m_Asset;
+
+        private uint m_EditSelectedSplats;
         public int splatCount => m_SplatCount;
 
         enum KernelIndices
@@ -511,6 +545,7 @@ namespace GaussianSplatting.Runtime
                     UnsafeUtility.SizeOf<GaussianSplatAsset.ChunkInfo>()) { name = "GaussianChunkData" };
                 m_GpuChunksValid = false;
             }
+
             // 创建一个结构化图形缓冲区来存储每个高斯溅射的视图数据
             m_GpuView = new GraphicsBuffer(GraphicsBuffer.Target.Structured, m_Asset.splatCount, kGpuViewDataSize);
             // 存储绘制高斯溅射所需的索引数据(一个正方体的六个面)
@@ -594,6 +629,7 @@ namespace GaussianSplatting.Runtime
             {
                 m_Sorter = new GpuSorting(m_CSSplatUtilities);
             }
+
             //在GS渲染系统中注册当前GS渲染器
             if (!m_Registered && resourcesAreSetUp)
             {
@@ -1277,5 +1313,6 @@ namespace GaussianSplatting.Runtime
         }
 
         public GraphicsBuffer GpuEditDeleted => m_GpuEditDeleted;
+        
     }
 }

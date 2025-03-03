@@ -2,6 +2,8 @@ using GaussianSplatting.Editor;
 using GaussianSplatting.Runtime;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.Serialization;
 
 //监听鼠标事件
 namespace GSTestScene
@@ -19,8 +21,10 @@ namespace GSTestScene
         private Vector2 _previousMousePosition = Vector2.zero;
 
         private UserAction _userAction;
-        public Vector2 mouseStartDragPos = Vector2.zero; //记录鼠标开始拖动时的坐标
-
+        // 框选GS时，记录鼠标开始拖动时的坐标
+        private Vector2 _mouseStartSelectPos = Vector2.zero; 
+        // 位移编辑中，记录鼠标单次移动的累积量
+        private Vector2 _mouseTranslateAccumulation = Vector2.zero;
         /// <summary>
         /// 绑定鼠标输入
         /// </summary>
@@ -30,8 +34,8 @@ namespace GSTestScene
             _userAction.Player.MouseLeftClick.performed += ctx =>
             {
                 _isMousePressed = true;
-                //当前为选择模式且鼠标不在UI上
-                if (Status.mode == Mode.Select && !SelectTool.IsPointerOverUIObject())
+                //当前为选择模式且鼠标不在UI上且不是在编辑状态下
+                if (Status.playMode == PlayMode.Select &&Status.editMode==EditMode.None&& !GsTools.IsPointerOverUIObject())
                 {
                     // 检测修饰键
                     if (!((Input.GetKey(KeyCode.LeftShift)) || (Input.GetKey(KeyCode.RightShift)) ||
@@ -44,7 +48,7 @@ namespace GSTestScene
                     _gsRenderer.EditStoreSelectionMouseDown();
                     GaussianSplatRendererEditor.RepaintAll();
                     //更新拖拽的起始坐标
-                    mouseStartDragPos = new Vector2(Input.mousePosition.x, Input.mousePosition.y);
+                    _mouseStartSelectPos = new Vector2(Input.mousePosition.x, Input.mousePosition.y);
                 }
 
                 Debug.Log("point down");
@@ -53,9 +57,9 @@ namespace GSTestScene
             _userAction.Player.MouseLeftClick.canceled += ctx =>
             {
                 _isMousePressed = false;
-                if (Status.mode == Mode.Select)
+                if (Status.playMode == PlayMode.Select)
                 {
-                    mouseStartDragPos = Vector2.zero;
+                    _mouseStartSelectPos = Vector2.zero;
                 }
 
                 Debug.Log("point up");
@@ -66,10 +70,10 @@ namespace GSTestScene
                 if (!_isMousePressed) return;
                 if (!Status.isInteractive) return;
                 //选择模式下移动（选择GS）
-                if (Status.mode == Mode.Select)
+                if (Status.playMode == PlayMode.Select && Status.editMode==EditMode.None)
                 {
                     bool isSubtract = ((Input.GetKey(KeyCode.LeftControl)) || (Input.GetKey(KeyCode.RightControl)));
-                    Vector2 rectStart = mouseStartDragPos;
+                    Vector2 rectStart = _mouseStartSelectPos;
                     Vector2 rectEnd = new Vector2(Input.mousePosition.x, Input.mousePosition.y);
                     //由于HandleUtility.GUIPointToScreenPixelCoordinate似乎不能在点击停顿的状态下正常使用，
                     //所以判断条件需要进行修改,仅在鼠标拖动时更新选区
@@ -84,7 +88,7 @@ namespace GSTestScene
                     //y坐标偏移
                     rectStart.y = mainCamera.pixelHeight - rectStart.y;
                     rectEnd.y = mainCamera.pixelHeight - rectEnd.y;
-                    Rect rect = SelectTool.FromToRect(rectStart, rectEnd);
+                    Rect rect = GsTools.FromToRect(rectStart, rectEnd);
                     Vector2 rectMin = HandleUtility.GUIPointToScreenPixelCoordinate(rect.min);
                     Vector2 rectMax = HandleUtility.GUIPointToScreenPixelCoordinate(rect.max);
                     _gsRenderer.EditUpdateSelection(rectMin, rectMax, mainCamera, isSubtract);
@@ -141,17 +145,72 @@ namespace GSTestScene
         {
             _userAction.Player.CtrlI.performed += ctx =>
             {
-                if (Status.mode == Mode.Select)
+                if (Status.playMode == PlayMode.Select)
                 {
                     _gsRenderer.EditInvertSelection();
                 }
             };
             _userAction.Player.CtrlA.performed += ctx =>
             {
-                if (Status.mode == Mode.Select)
+                if (Status.playMode == PlayMode.Select)
                 {
                     _gsRenderer.EditSelectAll();
                 }
+            };
+            _userAction.Player.CtrlShiftA.performed += ctx =>
+            {
+                if (Status.playMode == PlayMode.Select)
+                {
+                    _gsRenderer.EditDeselectAll();
+                }
+            };
+            _userAction.Player.Delete.performed += ctx =>
+            {
+                if (Status.playMode == PlayMode.Select)
+                {
+                    _gsRenderer.EditDeleteSelected();
+                }
+            };
+        }
+
+        /// <summary>
+        /// 绑定编辑模式输入
+        /// </summary>
+        private void BindSelectModeInput()
+        {
+            // 绑定鼠标监听输入
+            _userAction.Player.MouseMovement.performed += ctx =>
+            {
+                if (Status.editMode == EditMode.Translate)
+                {
+                    // 获取鼠标偏移
+                    Vector2 mouseDelta = ctx.ReadValue<Vector2>();
+                    // 加入累积量
+                    _mouseTranslateAccumulation += mouseDelta;
+                    // 根据相机参数将偏移转换为世界空间位移
+                    Vector3 deltaWorld = GsTools.ScreenDeltaToWorldDelta(mouseDelta, mainCamera);
+                    // 转换为本地空间位移
+                    Vector3 deltaLocal = _gsRenderer.transform.InverseTransformDirection(deltaWorld);
+                    // 应用位移
+                    _gsRenderer.EditTranslateSelection(deltaLocal);
+                }
+            };
+            _userAction.Player.MouseLeftClick.performed += ctx =>
+            {
+                // 在位移编辑模式下，点击鼠标左键以结束位移编辑
+                if (Status.editMode == EditMode.Translate)
+                {
+                    Status.EndSelectEdit();
+                    // 清空位移累积量
+                    _mouseTranslateAccumulation=Vector2.zero;
+                }
+            };
+            // 对选定区域进行位移操作
+            _userAction.Player.Gkey.performed += ctx =>
+            {
+                if (Status.playMode != PlayMode.Select) return;
+                // 切换到位移模式
+                Status.StartSelectTranslateEdit();
             };
         }
         
@@ -166,11 +225,14 @@ namespace GSTestScene
             BindModeChangeInput();
             BindMovementInput();
             BindSelectFuncInput();
+            BindSelectModeInput();
         }
 
 
         private void Update()
         {
+            // 判断当前是否有修饰键
+            if (Keyboard.current.shiftKey.isPressed || Keyboard.current.ctrlKey.isPressed) return;
             //相机移动
             if (Vector3.Magnitude(_cameraMovement) > 0.1f)
             {

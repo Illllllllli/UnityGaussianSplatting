@@ -121,6 +121,33 @@
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": false
+                },
+                {
+                    "name": "Ctrl Shift A",
+                    "type": "Button",
+                    "id": "f5b1ad2e-cb5f-4dec-a2e1-0ddde6f1ec14",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Delete",
+                    "type": "Button",
+                    "id": "71bd87d3-7b0b-467a-b726-31788a2e57f6",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "G key",
+                    "type": "Value",
+                    "id": "2b45573f-6a46-4f27-9c9a-2bea2040cb63",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
                 }
             ],
             "bindings": [
@@ -310,6 +337,72 @@
                     "action": "Ctrl A",
                     "isComposite": false,
                     "isPartOfComposite": true
+                },
+                {
+                    "name": "Two Modifiers",
+                    "id": "9e1c37d8-ab13-4e61-a24c-5f6db22733df",
+                    "path": "TwoModifiers",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Ctrl Shift A",
+                    "isComposite": true,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "modifier2",
+                    "id": "a197b986-b391-45d9-a487-a3e2e99bc1e3",
+                    "path": "<Keyboard>/ctrl",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Ctrl Shift A",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "modifier1",
+                    "id": "8c3002ea-86a8-49fc-8f6f-1c7a38d6f3a5",
+                    "path": "<Keyboard>/shift",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Ctrl Shift A",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "Binding",
+                    "id": "fb9188ff-6896-4483-ae6c-c544268246e6",
+                    "path": "<Keyboard>/a",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Ctrl Shift A",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "",
+                    "id": "cf41eff6-8e23-46fa-bfa7-535657709919",
+                    "path": "<Keyboard>/delete",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Delete",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "f29da3b0-196e-49b4-94ee-04aaeaac70ca",
+                    "path": "<Keyboard>/g",
+                    "interactions": "Press",
+                    "processors": "",
+                    "groups": "",
+                    "action": "G key",
+                    "isComposite": false,
+                    "isPartOfComposite": false
                 }
             ]
         }
