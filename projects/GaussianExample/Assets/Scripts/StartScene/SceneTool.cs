@@ -41,5 +41,11 @@ namespace StartScene
 
             Debug.Log($"load finished. find {ExistingGaussianSplatAssets.Count} results");
         }
+
+        //结束运行/切换场景时，清空资产列表
+        private void OnDestroy()
+        {
+            ExistingGaussianSplatAssets.Clear();
+        }
     }
 }

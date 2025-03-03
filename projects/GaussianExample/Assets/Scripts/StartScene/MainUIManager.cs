@@ -8,7 +8,7 @@ using Button = UnityEngine.UI.Button;
 
 namespace StartScene
 {
-    public class UIManager : MonoBehaviour
+    public class MainUIManager : MonoBehaviour
     {
         // 场景概要面板预制件
         public GameObject scenePanelPrefab;

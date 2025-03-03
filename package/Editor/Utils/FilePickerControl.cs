@@ -21,6 +21,11 @@ namespace GaussianSplatting.Editor.Utils
         const int kIconSize = 15;
         const int kRecentPathsCount = 20;
 
+        /// <summary>
+        /// 将长路径转换为易读的短格式
+        /// </summary>
+        /// <param name="path"></param>
+        /// <returns></returns>
         public static string PathToDisplayString(string path)
         {
             if (string.IsNullOrWhiteSpace(path))
@@ -40,7 +45,7 @@ namespace GaussianSplatting.Editor.Utils
             path = path.Replace('/', '-');
             return path;
         }
-
+        // 记录用户最近选择的文件/文件夹路径
         class PreviousPaths
         {
             public PreviousPaths(List<string> paths)
