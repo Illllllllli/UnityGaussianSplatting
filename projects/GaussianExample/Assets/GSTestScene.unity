@@ -180,7 +180,7 @@ MonoBehaviour:
     callback:
       m_PersistentCalls:
         m_Calls:
-        - m_Target: {fileID: 185463579}
+        - m_Target: {fileID: 0}
           m_TargetAssemblyTypeName: Status, Assembly-CSharp
           m_MethodName: UpdateIsInteractive
           m_Mode: 6
@@ -196,7 +196,7 @@ MonoBehaviour:
     callback:
       m_PersistentCalls:
         m_Calls:
-        - m_Target: {fileID: 185463579}
+        - m_Target: {fileID: 0}
           m_TargetAssemblyTypeName: Status, Assembly-CSharp
           m_MethodName: UpdateIsInteractive
           m_Mode: 6
@@ -594,7 +594,7 @@ MonoBehaviour:
     callback:
       m_PersistentCalls:
         m_Calls:
-        - m_Target: {fileID: 185463579}
+        - m_Target: {fileID: 0}
           m_TargetAssemblyTypeName: Status, Assembly-CSharp
           m_MethodName: UpdateIsInteractive
           m_Mode: 6
@@ -610,7 +610,7 @@ MonoBehaviour:
     callback:
       m_PersistentCalls:
         m_Calls:
-        - m_Target: {fileID: 185463579}
+        - m_Target: {fileID: 0}
           m_TargetAssemblyTypeName: Status, Assembly-CSharp
           m_MethodName: UpdateIsInteractive
           m_Mode: 6
@@ -685,7 +685,6 @@ GameObject:
   - component: {fileID: 185463580}
   - component: {fileID: 185463576}
   - component: {fileID: 185463578}
-  - component: {fileID: 185463579}
   m_Layer: 0
   m_Name: Manager
   m_TagString: Untagged
@@ -741,18 +740,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   gaussianSplats: {fileID: 0}
   mainCamera: {fileID: 1462254337}
---- !u!114 &185463579
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 185463575}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 586f5856f4bb26a4e8d722b6030b1512, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!114 &185463580
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1133,7 +1120,7 @@ MonoBehaviour:
     callback:
       m_PersistentCalls:
         m_Calls:
-        - m_Target: {fileID: 185463579}
+        - m_Target: {fileID: 0}
           m_TargetAssemblyTypeName: Status, Assembly-CSharp
           m_MethodName: UpdateIsInteractive
           m_Mode: 6
@@ -1149,7 +1136,7 @@ MonoBehaviour:
     callback:
       m_PersistentCalls:
         m_Calls:
-        - m_Target: {fileID: 185463579}
+        - m_Target: {fileID: 0}
           m_TargetAssemblyTypeName: Status, Assembly-CSharp
           m_MethodName: UpdateIsInteractive
           m_Mode: 6
@@ -2027,7 +2014,7 @@ MonoBehaviour:
     callback:
       m_PersistentCalls:
         m_Calls:
-        - m_Target: {fileID: 185463579}
+        - m_Target: {fileID: 0}
           m_TargetAssemblyTypeName: Status, Assembly-CSharp
           m_MethodName: UpdateIsInteractive
           m_Mode: 6
@@ -2043,7 +2030,7 @@ MonoBehaviour:
     callback:
       m_PersistentCalls:
         m_Calls:
-        - m_Target: {fileID: 185463579}
+        - m_Target: {fileID: 0}
           m_TargetAssemblyTypeName: Status, Assembly-CSharp
           m_MethodName: UpdateIsInteractive
           m_Mode: 6
@@ -2194,7 +2181,7 @@ MonoBehaviour:
     callback:
       m_PersistentCalls:
         m_Calls:
-        - m_Target: {fileID: 185463579}
+        - m_Target: {fileID: 0}
           m_TargetAssemblyTypeName: Status, Assembly-CSharp
           m_MethodName: UpdateIsInteractive
           m_Mode: 6
@@ -2210,7 +2197,7 @@ MonoBehaviour:
     callback:
       m_PersistentCalls:
         m_Calls:
-        - m_Target: {fileID: 185463579}
+        - m_Target: {fileID: 0}
           m_TargetAssemblyTypeName: Status, Assembly-CSharp
           m_MethodName: UpdateIsInteractive
           m_Mode: 6
@@ -3231,7 +3218,7 @@ MonoBehaviour:
     callback:
       m_PersistentCalls:
         m_Calls:
-        - m_Target: {fileID: 185463579}
+        - m_Target: {fileID: 0}
           m_TargetAssemblyTypeName: Status, Assembly-CSharp
           m_MethodName: UpdateIsInteractive
           m_Mode: 6
@@ -3247,7 +3234,7 @@ MonoBehaviour:
     callback:
       m_PersistentCalls:
         m_Calls:
-        - m_Target: {fileID: 185463579}
+        - m_Target: {fileID: 0}
           m_TargetAssemblyTypeName: Status, Assembly-CSharp
           m_MethodName: UpdateIsInteractive
           m_Mode: 6

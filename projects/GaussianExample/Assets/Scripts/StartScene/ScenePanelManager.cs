@@ -92,17 +92,11 @@ namespace StartScene
         {
             splatCountText.GetComponent<TextMeshProUGUI>().SetText(value.ToString());
         }
-
-        // 加载场景
-        private void LoadScene()
-        {
-            Status.GaussianSplatAssets.Add(gaussianSplatAsset);
-            SceneManager.LoadScene("GSTestScene");
-        }
+        
 
         private void Awake()
         {
-            loadButton.onClick.AddListener(LoadScene);
+            loadButton.onClick.AddListener(()=>SceneLoader.LoadScene(gaussianSplatAsset));
         }
     }
 }

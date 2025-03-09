@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 using System;
+using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
 using UnityEngine;
@@ -8,6 +9,7 @@ using UnityEngine.Experimental.Rendering;
 
 namespace GaussianSplatting.Runtime
 {
+    [Serializable]
     public class GaussianSplatAsset : ScriptableObject
     {
         public const int kCurrentVersion = 2023_10_20;
@@ -120,12 +122,22 @@ namespace GaussianSplatting.Runtime
 
         public void SetAssetFiles(TextAsset dataChunk, TextAsset dataPos, TextAsset dataOther, TextAsset dataColor, TextAsset dataSh)
         {
+            m_ChunkData.SetData(dataChunk.GetData<byte>().ToArray());
+            m_PosData.SetData(dataPos.GetData<byte>().ToArray());
+            m_OtherData.SetData(dataOther.GetData<byte>().ToArray());
+            m_ColorData.SetData(dataColor.GetData<byte>().ToArray());
+            m_SHData.SetData(dataSh.GetData<byte>().ToArray());
+        }
+        
+        public void SetAssetFiles(ByteAsset dataChunk, ByteAsset dataPos, ByteAsset dataOther, ByteAsset dataColor, ByteAsset dataSh)
+        {
             m_ChunkData = dataChunk;
             m_PosData = dataPos;
             m_OtherData = dataOther;
             m_ColorData = dataColor;
             m_SHData = dataSh;
         }
+
 
         public static int GetOtherSizeNoSHIndex(VectorFormat scaleFormat)
         {
@@ -220,12 +232,12 @@ namespace GaussianSplatting.Runtime
         [SerializeField] SHFormat m_SHFormat = SHFormat.Norm11;
         [SerializeField] ColorFormat m_ColorFormat;
 
-        [SerializeField] TextAsset m_PosData;
-        [SerializeField] TextAsset m_ColorData;
-        [SerializeField] TextAsset m_OtherData;
-        [SerializeField] TextAsset m_SHData;
+        [SerializeField] ByteAsset m_PosData;
+        [SerializeField] ByteAsset m_ColorData;
+        [SerializeField] ByteAsset m_OtherData;
+        [SerializeField] ByteAsset m_SHData;
         // Chunk data is optional (if data formats are fully lossless then there's no chunking)
-        [SerializeField] TextAsset m_ChunkData;
+        [SerializeField] ByteAsset m_ChunkData;
 
         [SerializeField] CameraInfo[] m_Cameras;
 
@@ -234,11 +246,11 @@ namespace GaussianSplatting.Runtime
         public SHFormat shFormat => m_SHFormat;
         public ColorFormat colorFormat => m_ColorFormat;
 
-        public TextAsset posData => m_PosData;
-        public TextAsset colorData => m_ColorData;
-        public TextAsset otherData => m_OtherData;
-        public TextAsset shData => m_SHData;
-        public TextAsset chunkData => m_ChunkData;
+        public ByteAsset posData => m_PosData;
+        public ByteAsset colorData => m_ColorData;
+        public ByteAsset otherData => m_OtherData;
+        public ByteAsset shData => m_SHData;
+        public ByteAsset chunkData => m_ChunkData;
         public CameraInfo[] cameras => m_Cameras;
 
         public struct ChunkInfo
@@ -257,4 +269,45 @@ namespace GaussianSplatting.Runtime
             public float fov;
         }
     }
+}
+
+/// <summary>
+/// 用于替换GSRenderer使用的Textasset
+/// </summary>
+[Serializable]
+public class ByteAsset
+{
+    private byte[] _bytes;
+
+    public ByteAsset(byte[] data)
+    {
+        _bytes = data;
+    }
+    // 属性定义（返回数据总字节数）
+    public int dataSize => _bytes != null ? _bytes.Length : 0;
+    public void SetData(byte[] data)
+    {
+        _bytes = data;
+    }
+    // 泛型方法实现
+    public NativeArray<T> GetData<T>() where T : struct {
+        // 验证数据对齐
+        int structSize = UnsafeUtility.SizeOf<T>();
+        if (_bytes.Length % structSize != 0) {
+            throw new InvalidOperationException($"Data size {_bytes.Length} is not multiple of {structSize}");
+        }
+    
+        // 创建指向原始数据的NativeArray（无需内存分配）
+        NativeArray<T> array;
+        unsafe {
+            void* ptr = UnsafeUtility.AddressOf(ref _bytes[0]);
+            array = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<T>(
+                ptr, _bytes.Length / structSize, Allocator.None);
+        }
+    
+        // 安全句柄（防止数据被GC回收）
+        NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref array, AtomicSafetyHandle.Create());
+        return array;
+    }
+
 }

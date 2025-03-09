@@ -2,14 +2,17 @@ using System;
 using GaussianSplatting.Runtime;
 using GSTestScene;
 using UnityEngine;
-using UnityEngine.Serialization;
-using UnityEngine.UIElements;
+
 using Button = UnityEngine.UI.Button;
 
 namespace StartScene
 {
     public class MainUIManager : MonoBehaviour
     {
+        // 主面板
+        public GameObject mainCanvas;
+        private static GameObject MainCanvas; 
+        
         // 场景概要面板预制件
         public GameObject scenePanelPrefab;
 
@@ -18,11 +21,34 @@ namespace StartScene
 
         // 滚动视图面板
         public GameObject scrollViewContainer;
+        
+        // 创建新资产面板
+        public GameObject createAssetPanel;
+        
+        // 提示面板
+        public GameObject tipsPanelPrefab;
+
+        public static GameObject TipsPanelPrefab;
+        // 提示面板实例
+        public static GameObject TipsPanel;
 
         // 三个按钮
         public Button createButton;
         public Button loadButton;
         public Button exitButton;
+
+        private void Awake()
+        {
+            if (tipsPanelPrefab)
+            {
+                TipsPanelPrefab = tipsPanelPrefab;
+            }
+
+            if (mainCanvas)
+            {
+                MainCanvas = mainCanvas;
+            }
+        }
 
         private void OnEnable()
         {
@@ -36,6 +62,7 @@ namespace StartScene
         /// </summary>
         private void HandleClickCreateButton()
         {
+            createAssetPanel.SetActive(true);
         }
 
         /// <summary>
@@ -48,14 +75,14 @@ namespace StartScene
             // 清空现有内容
             foreach (Transform child in sceneListContent.GetComponentsInChildren<Transform>())
             {
-                if(child !=sceneListContent.transform)
+                if (child != sceneListContent.transform)
                 {
                     Destroy(child.gameObject);
                 }
             }
 
             //往滚动视图里面塞面板预制件
-            foreach (GaussianSplatAsset gaussianSplatAsset in SceneTool.ExistingGaussianSplatAssets)
+            foreach (GaussianSplatAsset gaussianSplatAsset in SceneLoader.ExistingGaussianSplatAssets)
             {
                 GameObject scenePanel = Instantiate(scenePanelPrefab, sceneListContent.transform);
                 ScenePanelManager scenePanelManager = scenePanel.GetComponent<ScenePanelManager>();
@@ -63,12 +90,23 @@ namespace StartScene
             }
         }
 
-        // private void OnDestroy()
-        // {
-        //     createButton.onClick.RemoveAllListeners();
-        //     loadButton.onClick.RemoveAllListeners();
-        //     exitButton.onClick.RemoveAllListeners();
-        // }
+        /// <summary>
+        /// 实例化一个Tips组件显示Tips.保证任何时候仅存在一个组件
+        /// </summary>
+        /// <param name="tips">要显示的tips</param>
+        /// <returns>生成的组件实例</returns>
+        public static GameObject ShowTip(string tips)
+        {
+            if(!TipsPanelPrefab||!MainCanvas)return null;
+            if(TipsPanel)
+            {
+                Destroy(TipsPanel);
+            }
+            TipsPanel = Instantiate(TipsPanelPrefab, MainCanvas.transform);
+            TipsPanel.GetComponent<TipsManager>().SetTipText(tips);
+            return TipsPanel;
+        }
+
 
         /// <summary>
         /// 退出游戏

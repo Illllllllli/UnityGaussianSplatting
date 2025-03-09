@@ -125,7 +125,7 @@ namespace GaussianSplatting.Editor
                 long sizeChunk = isUsingChunks ? GaussianSplatAsset.CalcChunkDataSize(m_PrevVertexCount) : 0;
                 totalSize = sizePos + sizeOther + sizeCol + sizeSHs + sizeChunk;
             }
-
+            
             const float kSizeColWidth = 70;
             EditorGUI.BeginDisabledGroup(m_Quality != DataQuality.Custom);
             EditorGUI.indentLevel++;
@@ -310,7 +310,6 @@ namespace GaussianSplatting.Editor
             // files are created, import them so we can get to the imported objects, ugh
             EditorUtility.DisplayProgressBar(kProgressTitle, "Initial texture import", 0.85f);
             AssetDatabase.Refresh(ImportAssetOptions.ForceUncompressedImport);
-
             EditorUtility.DisplayProgressBar(kProgressTitle, "Setup data onto asset", 0.95f);
             asset.SetAssetFiles(
                 useChunks ? AssetDatabase.LoadAssetAtPath<TextAsset>(pathChunk) : null,
@@ -349,7 +348,7 @@ namespace GaussianSplatting.Editor
         }
 
         [BurstCompile]
-        struct CalcBoundsJob : IJob
+        public struct CalcBoundsJob : IJob
         {
             [NativeDisableUnsafePtrRestriction] public unsafe float3* m_BoundsMin;
             [NativeDisableUnsafePtrRestriction] public unsafe float3* m_BoundsMax;
@@ -398,7 +397,7 @@ namespace GaussianSplatting.Editor
             }
         }
 
-        static void ReorderMorton(NativeArray<InputSplatData> splatData, float3 boundsMin, float3 boundsMax)
+        public static void ReorderMorton(NativeArray<InputSplatData> splatData, float3 boundsMin, float3 boundsMax)
         {
             ReorderMortonJob order = new ReorderMortonJob
             {
@@ -463,7 +462,7 @@ namespace GaussianSplatting.Editor
             return true;
         }
 
-        static unsafe void ClusterSHs(NativeArray<InputSplatData> splatData, GaussianSplatAsset.SHFormat format, out NativeArray<GaussianSplatAsset.SHTableItemFloat16> shs, out NativeArray<int> shIndices)
+        public static unsafe void ClusterSHs(NativeArray<InputSplatData> splatData, GaussianSplatAsset.SHFormat format, out NativeArray<GaussianSplatAsset.SHTableItemFloat16> shs, out NativeArray<int> shIndices)
         {
             shs = default;
             shIndices = default;
@@ -628,7 +627,7 @@ namespace GaussianSplatting.Editor
             }
         }
 
-        static void CreateChunkData(NativeArray<InputSplatData> splatData, string filePath, ref Hash128 dataHash)
+        public static void CreateChunkData(NativeArray<InputSplatData> splatData, string filePath, ref Hash128 dataHash)
         {
             int chunkCount = (splatData.Length + GaussianSplatAsset.kChunkSize - 1) / GaussianSplatAsset.kChunkSize;
             CalcChunkDataJob job = new CalcChunkDataJob
@@ -648,7 +647,7 @@ namespace GaussianSplatting.Editor
         }
 
         [BurstCompile]
-        struct ConvertColorJob : IJobParallelFor
+        public struct ConvertColorJob : IJobParallelFor
         {
             public int width, height;
             [ReadOnly] public NativeArray<float4> inputData;
@@ -748,7 +747,7 @@ namespace GaussianSplatting.Editor
         }
 
         [BurstCompile]
-        struct CreatePositionsDataJob : IJobParallelFor
+        public struct CreatePositionsDataJob : IJobParallelFor
         {
             [ReadOnly] public NativeArray<InputSplatData> m_Input;
             public GaussianSplatAsset.VectorFormat m_Format;
@@ -763,7 +762,7 @@ namespace GaussianSplatting.Editor
         }
 
         [BurstCompile]
-        struct CreateOtherDataJob : IJobParallelFor
+        public struct CreateOtherDataJob : IJobParallelFor
         {
             [ReadOnly] public NativeArray<InputSplatData> m_Input;
             [NativeDisableContainerSafetyRestriction] [ReadOnly] public NativeArray<int> m_SplatSHIndices;
@@ -861,7 +860,7 @@ namespace GaussianSplatting.Editor
         }
 
         [BurstCompile]
-        struct CreateColorDataJob : IJobParallelFor
+        public struct CreateColorDataJob : IJobParallelFor
         {
             [ReadOnly] public NativeArray<InputSplatData> m_Input;
             [NativeDisableParallelForRestriction] public NativeArray<float4> m_Output;
@@ -922,7 +921,7 @@ namespace GaussianSplatting.Editor
         }
 
         [BurstCompile]
-        struct CreateSHDataJob : IJobParallelFor
+        public struct CreateSHDataJob : IJobParallelFor
         {
             [ReadOnly] public NativeArray<InputSplatData> m_Input;
             public GaussianSplatAsset.SHFormat m_Format;
@@ -1026,7 +1025,7 @@ namespace GaussianSplatting.Editor
             }
         }
 
-        static void EmitSimpleDataFile<T>(NativeArray<T> data, string filePath, ref Hash128 dataHash) where T : unmanaged
+        public static void EmitSimpleDataFile<T>(NativeArray<T> data, string filePath, ref Hash128 dataHash) where T : unmanaged
         {
             dataHash.Append(data);
             using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write);
@@ -1055,7 +1054,7 @@ namespace GaussianSplatting.Editor
             }
         }
 
-        static GaussianSplatAsset.CameraInfo[] LoadJsonCamerasFile(string curPath, bool doImport)
+        public static GaussianSplatAsset.CameraInfo[] LoadJsonCamerasFile(string curPath, bool doImport)
         {
             if (!doImport)
                 return null;
