@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
 
 using System;
+using System.IO;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
+
 
 namespace GaussianSplatting.Runtime
 {
@@ -120,17 +122,40 @@ namespace GaussianSplatting.Runtime
             m_DataHash = hash;
         }
 
-        public void SetAssetFiles(TextAsset dataChunk, TextAsset dataPos, TextAsset dataOther, TextAsset dataColor, TextAsset dataSh)
+        /// <summary>
+        /// 因为将TextAsset改为了自建的ByteAsset，因此Unity没办法自动加载子数据文件。
+        /// 所以在放到gsrenderer的时候要确认一下ByteAsset是否正常，没有的话尝试从外部加载。
+        /// </summary>
+        /// <returns>ByteAsset是否有效</returns>
+        public bool CheckByteAsset()
         {
-            m_ChunkData.SetData(dataChunk.GetData<byte>().ToArray());
-            m_PosData.SetData(dataPos.GetData<byte>().ToArray());
-            m_OtherData.SetData(dataOther.GetData<byte>().ToArray());
-            m_ColorData.SetData(dataColor.GetData<byte>().ToArray());
-            m_SHData.SetData(dataSh.GetData<byte>().ToArray());
+            if (posData.dataSize > 0 && otherData.dataSize > 0 && colorData.dataSize > 0 && shData.dataSize > 0)
+            {
+                return true;
+            }
+            m_ChunkData = ByteAsset.CreateByteAssetFromFile(Path.Join(assetDataPath, "_chk.bytes"));
+            m_PosData = ByteAsset.CreateByteAssetFromFile(Path.Join(assetDataPath, $"{name}_pos.bytes"));
+            m_OtherData= ByteAsset.CreateByteAssetFromFile(Path.Join(assetDataPath, $"{name}_oth.bytes"));
+            m_ColorData = ByteAsset.CreateByteAssetFromFile(Path.Join(assetDataPath, $"{name}_col.bytes"));
+            m_SHData= ByteAsset.CreateByteAssetFromFile(Path.Join(assetDataPath, $"{name}_shs.bytes"));
+
+            return posData.dataSize > 0 && otherData.dataSize > 0 && colorData.dataSize > 0 && shData.dataSize > 0;
         }
         
-        public void SetAssetFiles(ByteAsset dataChunk, ByteAsset dataPos, ByteAsset dataOther, ByteAsset dataColor, ByteAsset dataSh)
+        /// <summary>
+        /// 创建资产时，设置资产的ByteAsset数据块.
+        /// </summary>
+        /// <param name="dataPath">资产路径文件夹</param>
+        /// <param name="edit">是否可编辑（需要colmap文件）</param>
+        /// <param name="dataChunk">压缩数据块</param>
+        /// <param name="dataPos">位置数据块</param>
+        /// <param name="dataOther">缩放数据块</param>
+        /// <param name="dataColor">颜色数据块</param>
+        /// <param name="dataSh">sh数据块</param>
+        public void SetAssetFiles(string dataPath ,bool edit,ByteAsset  dataChunk, ByteAsset dataPos, ByteAsset dataOther, ByteAsset dataColor, ByteAsset dataSh)
         {
+            enableEdit = edit;
+            assetDataPath = dataPath;
             m_ChunkData = dataChunk;
             m_PosData = dataPos;
             m_OtherData = dataOther;
@@ -241,6 +266,10 @@ namespace GaussianSplatting.Runtime
 
         [SerializeField] CameraInfo[] m_Cameras;
 
+        // 存储对应assetData的数据路径；
+        public string assetDataPath;
+        public bool enableEdit;
+
         public VectorFormat posFormat => m_PosFormat;
         public VectorFormat scaleFormat => m_ScaleFormat;
         public SHFormat shFormat => m_SHFormat;
@@ -284,6 +313,28 @@ public class ByteAsset
         _bytes = data;
     }
     // 属性定义（返回数据总字节数）
+    
+    /// <summary>
+    /// 从文件创建ByteAsset
+    /// </summary>
+    /// <param name="filePath">文件路径</param>
+    /// <returns>创建的ByteAsset对象</returns>
+    public static ByteAsset CreateByteAssetFromFile(string filePath)
+    {
+        try
+        {
+            byte[] bytes = File.ReadAllBytes(filePath);
+            ByteAsset byteAsset = new ByteAsset(bytes);
+            return byteAsset;
+        }
+        catch
+        {
+            return new ByteAsset(new byte[]{});
+        }
+
+        
+    }
+    
     public int dataSize => _bytes != null ? _bytes.Length : 0;
     public void SetData(byte[] data)
     {

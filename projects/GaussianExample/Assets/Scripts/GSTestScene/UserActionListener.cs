@@ -107,6 +107,18 @@ namespace GSTestScene
                     mainCamera.transform.localEulerAngles = angles;
                 }
             };
+            
+            // 鼠标滚轮滑动
+            _userAction.Player.MouseWheel.performed += ctx =>
+            {
+                float scrollDelta = ctx.ReadValue<Vector2>().y;
+                // 反转坐标轴
+                float newFoV = mainCamera.fieldOfView - (scrollDelta / Status.MouseScrollBase);
+                if (newFoV is >= Status.CameraFovMin and <= Status.CameraFovMax)
+                {
+                    mainCamera.fieldOfView = newFoV;
+                }
+            };
         }
         /// <summary>
         /// 绑定模式切换输入
@@ -236,8 +248,10 @@ namespace GSTestScene
             //相机移动
             if (Vector3.Magnitude(_cameraMovement) > 0.1f)
             {
+                // 考虑FoV对移动速度的影响
+                float fovRatio = Mathf.Pow(mainCamera.fieldOfView / Status.BaseFoV,0.8f);
                 //按本地坐标移动
-                mainCamera.transform.Translate(_cameraMovement * Status.translateSensitivity);
+                mainCamera.transform.Translate(fovRatio * Status.translateSensitivity*_cameraMovement );
             }
         }
 

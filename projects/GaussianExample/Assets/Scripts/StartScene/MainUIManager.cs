@@ -94,17 +94,27 @@ namespace StartScene
         /// 实例化一个Tips组件显示Tips.保证任何时候仅存在一个组件
         /// </summary>
         /// <param name="tips">要显示的tips</param>
+        /// <param name="unique">是否使用唯一提示组件。若为否则额外生成临时提示组件（只能由用户摧毁）</param>
         /// <returns>生成的组件实例</returns>
-        public static GameObject ShowTip(string tips)
+        public static GameObject ShowTip(string tips, bool unique=true)
         {
             if(!TipsPanelPrefab||!MainCanvas)return null;
-            if(TipsPanel)
+            if (unique)
             {
-                Destroy(TipsPanel);
+                if (TipsPanel)
+                {
+                    Destroy(TipsPanel);
+                }
+
+                TipsPanel = Instantiate(TipsPanelPrefab, MainCanvas.transform);
+                TipsPanel.GetComponent<TipsManager>().SetTipText(tips);
+                return TipsPanel;
             }
-            TipsPanel = Instantiate(TipsPanelPrefab, MainCanvas.transform);
-            TipsPanel.GetComponent<TipsManager>().SetTipText(tips);
-            return TipsPanel;
+
+            GameObject  tempTipsPanel= Instantiate(TipsPanelPrefab, MainCanvas.transform);
+            tempTipsPanel.GetComponent<TipsManager>().SetTipText(tips);
+            return tempTipsPanel;
+
         }
 
 

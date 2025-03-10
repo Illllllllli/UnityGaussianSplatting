@@ -8,7 +8,7 @@ using Object = System.Object;
 
 namespace GSTestScene
 {
-    public class UIManager : MonoBehaviour
+    public class MainUIManager : MonoBehaviour
     {
         public GameObject gaussianSplats;
         public GameObject uiCanvas;
@@ -128,17 +128,6 @@ namespace GSTestScene
         {
             GaussianSplatRendererEditor.ExportPlyFile(gsRenderer,false);
         }
-
-        /// <summary>
-        /// 解除所有监听
-        /// </summary>
-        private void OnDestroy()
-        {
-           // editButton.onClick.RemoveAllListeners();
-           // viewButton.onClick.RemoveAllListeners();
-           // selectButton.onClick.RemoveAllListeners();
-           // exportButton.onClick.RemoveAllListeners();
-           
-        }
+        
     }
 }

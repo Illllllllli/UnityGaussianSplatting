@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using GaussianSplatting.Runtime;
+using StartScene;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
@@ -23,7 +24,15 @@ public class Status : MonoBehaviour
 
     // 框选编辑位移灵敏度
     public static float EditTranslateSensitivity = 0.01f;
-
+    
+    
+    // 基准/最小/最大FoV
+    public const float BaseFoV = 30f;
+    public const float CameraFovMin = 10f;
+    public const float CameraFovMax = 120f;
+    // 基准鼠标滚动量
+    public const float MouseScrollBase = 120f;
+    
 
     // 检查当前鼠标状态能否与场景交互
     public static bool isInteractive { get; private set; } = true;
@@ -70,6 +79,17 @@ public class Status : MonoBehaviour
     public static readonly string SceneFileRootEditor = Path.Join(Application.dataPath, "Resources", SceneFileName);
     public static string SceneFileRootPlayer;
     public const string SceneFileSuffixPlayer = ".dat";
+    // 临时文件夹
+    public const string TemporaryDir = ".tmp";
+    // 存储可编辑文件的colmap相关文件的文件夹
+    public const string ColmapDirName = "colmap";
+
+    public const string ChunkFileSuffix = "_chk.bytes";
+    public const string PositionFileSuffix = "_pos.bytes";
+    public const string ScaleFileSuffix = "_oth.bytes";
+    public const string ColorFileSuffix = "_col.bytes";
+    public const string SHFileSuffix = "_shs.bytes";
+    
 
     // 刚切换场景时需要加载的GS资产
     public static readonly List<GaussianSplatAsset> GaussianSplatAssets = new();
@@ -125,10 +145,13 @@ public class Status : MonoBehaviour
         DontDestroyOnLoad(this);
     }
 
-    // 退出编辑器时，清空GS资产列表
+    /// <summary>
+    /// 退出编辑器时，清空GS资产列表，删除临时文件夹
+    /// </summary>
     private void OnDestroy()
     {
         GaussianSplatAssets.Clear();
+        FileHelper.DeletePath(Path.Join(SceneFileRootPlayer, TemporaryDir),true,out _);
     }
 }
 
@@ -148,7 +171,7 @@ public enum EditMode
     Scale
 }
 
-// 选择工具函数类
+// 工具函数类
 internal static class GsTools
 {
     /// <summary>

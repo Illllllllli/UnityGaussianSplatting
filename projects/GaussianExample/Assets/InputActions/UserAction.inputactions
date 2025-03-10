@@ -24,6 +24,15 @@
                     "initialStateCheck": true
                 },
                 {
+                    "name": "Mouse Wheel",
+                    "type": "Value",
+                    "id": "252deb70-deaa-4c7d-8a83-e624bd07bcf5",
+                    "expectedControlType": "Vector2",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
                     "name": "Switch View Mode",
                     "type": "Button",
                     "id": "e5e6af57-96d9-4479-894a-9de835e2487f",
@@ -401,6 +410,17 @@
                     "processors": "",
                     "groups": "",
                     "action": "G key",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "202bc07e-cec1-47d5-83d9-2f4ef76a3b8a",
+                    "path": "<Mouse>/scroll",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Mouse Wheel",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

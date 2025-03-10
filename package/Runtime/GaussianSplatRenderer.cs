@@ -493,12 +493,14 @@ namespace GaussianSplatting.Runtime
         /// <summary>
         /// 为高斯溅射渲染系统创建必要的图形资源。包括图形缓冲区和纹理，
         /// 用于存储高斯溅射的数据并在GPU上进行渲染。
+        /// 每次更新时调用
         /// </summary>
         void CreateResourcesForAsset()
         {
             // 检查资产有效性
             if (!HasValidAsset)
                 return;
+            
             // 设置高斯溅射的数量，这个值从资产中获取
             m_SplatCount = asset.splatCount;
             // 创建多个图形缓冲区来存储高斯溅射的位置数据、其他数据、SH数据，并从资产中获取数据初始化这个缓冲区
@@ -601,9 +603,10 @@ namespace GaussianSplatting.Runtime
                 m_SorterArgs.resources = GpuSorting.SupportResources.Load((uint)count);
         }
 
+        // new: 加入2个子项用于检查资产数据完整性
         bool resourcesAreSetUp => m_ShaderSplats != null && m_ShaderComposite != null && m_ShaderDebugPoints != null &&
                                   m_ShaderDebugBoxes != null && m_CSSplatUtilities != null &&
-                                  SystemInfo.supportsComputeShaders;
+                                  SystemInfo.supportsComputeShaders && m_Asset!=null&&m_Asset.CheckByteAsset();
 
         /// <summary>
         /// 确保所有所需材质都已经创建
@@ -645,7 +648,9 @@ namespace GaussianSplatting.Runtime
         {
             m_FrameCounter = 0;
             if (!resourcesAreSetUp)
+            {
                 return;
+            }
 
             EnsureMaterials();
             EnsureSorterAndRegister();
@@ -704,6 +709,9 @@ namespace GaussianSplatting.Runtime
             buf = null;
         }
 
+        /// <summary>
+        /// 丢弃资产使用的临时缓存块
+        /// </summary>
         void DisposeResourcesForAsset()
         {
             DestroyImmediate(m_GpuColorData);

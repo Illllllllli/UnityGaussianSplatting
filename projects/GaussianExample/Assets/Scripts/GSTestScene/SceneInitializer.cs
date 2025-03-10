@@ -21,11 +21,11 @@ namespace GSTestScene
                 gaussianSplats.GetComponent<GaussianSplatRenderer>().m_Asset = gaussianSplatAsset;
                 // 为其他脚本设置GS对象
                 // （由于其他脚本还没有适配多个物体，先这么写）
-                GetComponent<UIManager>().gaussianSplats = gaussianSplats;
+                GetComponent<MainUIManager>().gaussianSplats = gaussianSplats;
                 GetComponent<UserActionListener>().gaussianSplats = gaussianSplats;
             }
 
-            GetComponent<UIManager>().enabled = true;
+            GetComponent<MainUIManager>().enabled = true;
             GetComponent<UserActionListener>().enabled = true;
             Status.SwitchViewMode();
         }

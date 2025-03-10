@@ -1,6 +1,9 @@
 using System;
+using System.IO;
 using GaussianSplatting.Runtime;
 using StartScene;
+using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 
 /// <summary>
@@ -25,11 +28,13 @@ public class GaussianSplatAssetData
             _y = vector3.y;
             _z = vector3.z;
         }
+
         public Vector3 Get()
         {
             return new Vector3(_x, _y, _z);
         }
     }
+
     //基本信息
     private string _name;
     private int _formatVersion;
@@ -43,12 +48,16 @@ public class GaussianSplatAssetData
     private Hash128 _dataHash;
     private GaussianSplatAsset.CameraInfo[] cameras;
 
+    private string _assetDataPath;
     private string _chunkPath, _positionPath, _scalePath, _colorPath, _shPath;
     private bool _useChunks;
+    private bool _enableEdit;
 
-    public GaussianSplatAssetData(GaussianSplatAsset asset,bool useChunks,string chunkPath,string positionPath,string scalePath,string colorPath,string shPath)
+    public GaussianSplatAssetData(GaussianSplatAsset asset, string assetDataPath, bool enableEdit, bool useChunks,
+        string chunkPath, string positionPath, string scalePath, string colorPath, string shPath)
     {
         _name = asset.name;
+        _enableEdit = enableEdit;
         _formatVersion = asset.formatVersion;
         _splatCount = asset.splatCount;
         _posFormat = asset.posFormat;
@@ -59,8 +68,9 @@ public class GaussianSplatAssetData
         _boundsMax = new Vector3Internal(asset.boundsMax);
         _dataHash = asset.dataHash;
         cameras = asset.cameras;
-        
+
         // 外部数据路径
+        _assetDataPath = assetDataPath;
         _useChunks = useChunks;
         _chunkPath = chunkPath;
         _positionPath = positionPath;
@@ -68,7 +78,7 @@ public class GaussianSplatAssetData
         _colorPath = colorPath;
         _shPath = shPath;
     }
-    
+
 
     /// <summary>
     /// 把当前的可序列化数据转换为GaussianSplatAsset
@@ -79,13 +89,15 @@ public class GaussianSplatAssetData
         GaussianSplatAsset asset = ScriptableObject.CreateInstance<GaussianSplatAsset>();
         asset.name = _name;
         // 初始化
-        asset.Initialize(_splatCount,_posFormat,_scaleFormat,_colorFormat,_shFormat,_boundsMin.Get(),_boundsMax.Get(),cameras);
+        asset.Initialize(_splatCount, _posFormat, _scaleFormat, _colorFormat, _shFormat, _boundsMin.Get(),
+            _boundsMax.Get(), cameras);
         // 导入外部数据
-        asset.SetAssetFiles(_useChunks ? CreateAssetManager.CreateByteAssetFromFile(_chunkPath) : null,
-            CreateAssetManager.CreateByteAssetFromFile(_positionPath),
-            CreateAssetManager.CreateByteAssetFromFile(_scalePath),
-            CreateAssetManager.CreateByteAssetFromFile(_colorPath),
-            CreateAssetManager.CreateByteAssetFromFile(_shPath));
+        asset.SetAssetFiles(_assetDataPath, _enableEdit,
+            _useChunks ? ByteAsset.CreateByteAssetFromFile(_chunkPath) : null,
+            ByteAsset.CreateByteAssetFromFile(_positionPath),
+            ByteAsset.CreateByteAssetFromFile(_scalePath),
+            ByteAsset.CreateByteAssetFromFile(_colorPath),
+            ByteAsset.CreateByteAssetFromFile(_shPath));
         return asset;
     }
 }

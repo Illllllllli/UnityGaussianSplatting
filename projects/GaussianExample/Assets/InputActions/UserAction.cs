@@ -46,6 +46,15 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""initialStateCheck"": true
                 },
                 {
+                    ""name"": ""Mouse Wheel"",
+                    ""type"": ""Value"",
+                    ""id"": ""252deb70-deaa-4c7d-8a83-e624bd07bcf5"",
+                    ""expectedControlType"": ""Vector2"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": true
+                },
+                {
                     ""name"": ""Switch View Mode"",
                     ""type"": ""Button"",
                     ""id"": ""e5e6af57-96d9-4479-894a-9de835e2487f"",
@@ -425,6 +434,17 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""action"": ""G key"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""202bc07e-cec1-47d5-83d9-2f4ef76a3b8a"",
+                    ""path"": ""<Mouse>/scroll"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Mouse Wheel"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
                 }
             ]
         }
@@ -435,6 +455,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         m_Player = asset.FindActionMap("Player", throwIfNotFound: true);
         m_Player_MouseLeftClick = m_Player.FindAction("Mouse Left Click", throwIfNotFound: true);
         m_Player_MouseMovement = m_Player.FindAction("Mouse Movement", throwIfNotFound: true);
+        m_Player_MouseWheel = m_Player.FindAction("Mouse Wheel", throwIfNotFound: true);
         m_Player_SwitchViewMode = m_Player.FindAction("Switch View Mode", throwIfNotFound: true);
         m_Player_SwitchSelectMode = m_Player.FindAction("Switch Select Mode", throwIfNotFound: true);
         m_Player_SwitchEditMode = m_Player.FindAction("Switch Edit Mode", throwIfNotFound: true);
@@ -512,6 +533,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
     private List<IPlayerActions> m_PlayerActionsCallbackInterfaces = new List<IPlayerActions>();
     private readonly InputAction m_Player_MouseLeftClick;
     private readonly InputAction m_Player_MouseMovement;
+    private readonly InputAction m_Player_MouseWheel;
     private readonly InputAction m_Player_SwitchViewMode;
     private readonly InputAction m_Player_SwitchSelectMode;
     private readonly InputAction m_Player_SwitchEditMode;
@@ -532,6 +554,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         public PlayerActions(@UserAction wrapper) { m_Wrapper = wrapper; }
         public InputAction @MouseLeftClick => m_Wrapper.m_Player_MouseLeftClick;
         public InputAction @MouseMovement => m_Wrapper.m_Player_MouseMovement;
+        public InputAction @MouseWheel => m_Wrapper.m_Player_MouseWheel;
         public InputAction @SwitchViewMode => m_Wrapper.m_Player_SwitchViewMode;
         public InputAction @SwitchSelectMode => m_Wrapper.m_Player_SwitchSelectMode;
         public InputAction @SwitchEditMode => m_Wrapper.m_Player_SwitchEditMode;
@@ -561,6 +584,9 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
             @MouseMovement.started += instance.OnMouseMovement;
             @MouseMovement.performed += instance.OnMouseMovement;
             @MouseMovement.canceled += instance.OnMouseMovement;
+            @MouseWheel.started += instance.OnMouseWheel;
+            @MouseWheel.performed += instance.OnMouseWheel;
+            @MouseWheel.canceled += instance.OnMouseWheel;
             @SwitchViewMode.started += instance.OnSwitchViewMode;
             @SwitchViewMode.performed += instance.OnSwitchViewMode;
             @SwitchViewMode.canceled += instance.OnSwitchViewMode;
@@ -613,6 +639,9 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
             @MouseMovement.started -= instance.OnMouseMovement;
             @MouseMovement.performed -= instance.OnMouseMovement;
             @MouseMovement.canceled -= instance.OnMouseMovement;
+            @MouseWheel.started -= instance.OnMouseWheel;
+            @MouseWheel.performed -= instance.OnMouseWheel;
+            @MouseWheel.canceled -= instance.OnMouseWheel;
             @SwitchViewMode.started -= instance.OnSwitchViewMode;
             @SwitchViewMode.performed -= instance.OnSwitchViewMode;
             @SwitchViewMode.canceled -= instance.OnSwitchViewMode;
@@ -676,6 +705,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
     {
         void OnMouseLeftClick(InputAction.CallbackContext context);
         void OnMouseMovement(InputAction.CallbackContext context);
+        void OnMouseWheel(InputAction.CallbackContext context);
         void OnSwitchViewMode(InputAction.CallbackContext context);
         void OnSwitchSelectMode(InputAction.CallbackContext context);
         void OnSwitchEditMode(InputAction.CallbackContext context);

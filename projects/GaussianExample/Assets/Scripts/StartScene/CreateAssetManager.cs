@@ -26,13 +26,19 @@ namespace StartScene
         // UI组件
         public Button browseInputButton;
 
+        public Button browseColmapButton;
+
         public TMP_InputField inputFileField;
 
         public TMP_InputField outputFolderField;
 
+        public TMP_InputField colmapDirField;
+
         public TMP_InputField assetNameField;
 
         public Toggle importCameraToggle;
+
+        public Toggle enableEditToggle;
 
         public TMP_Dropdown qualityDropdown;
 
@@ -74,8 +80,10 @@ namespace StartScene
 
         // 一些参数
         private string _inputFile;
+        private string _colmapDir;
         private bool _importCameras = true;
-        private string _outputFolder = Status.SceneFileRootPlayer;
+        private bool _enableEdit;
+        private string _outputDir = Status.SceneFileRootPlayer;
         private string _assetName;
         private DataQuality _quality = DataQuality.Medium;
 
@@ -327,9 +335,9 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
             });
             outputFolderField.onValueChanged.AddListener(value =>
             {
-                if (FolderNameValidator.ValidateFolderName(value, out _errorMessage))
+                if (FileHelper.ValidateFolderName(value, out _errorMessage))
                 {
-                    _outputFolder = Path.Join(Status.SceneFileRootPlayer, value);
+                    _outputDir = Path.Join(Status.SceneFileRootPlayer, value);
                 }
                 else
                 {
@@ -338,7 +346,7 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
             });
             assetNameField.onValueChanged.AddListener(value =>
             {
-                if (FolderNameValidator.ValidateFolderName(value, out _errorMessage))
+                if (FileHelper.ValidateFolderName(value, out _errorMessage))
                 {
                     _assetName = value;
                 }
@@ -347,11 +355,16 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
                     MainUIManager.ShowTip(_errorMessage);
                 }
             });
-            // 设置文件浏览过滤条件
-            FileBrowser.SetFilters(false, new FileBrowser.Filter("点云文件", ".ply", ".slz"));
+            colmapDirField.onValueChanged.AddListener(value => _colmapDir = value);
 
             // 文件浏览按钮回调
-            browseInputButton.onClick.AddListener(() => StartCoroutine(HandleFileBrowser()));
+            browseInputButton.onClick.AddListener(() =>
+            {
+                FileBrowser.SetFilters(false, new FileBrowser.Filter("点云文件", ".ply", ".slz"));
+                StartCoroutine(HandleFileBrowser(false));
+            });
+
+            browseColmapButton.onClick.AddListener(() => StartCoroutine(HandleFileBrowser(true)));
         }
 
         /// <summary>
@@ -361,28 +374,39 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
         {
             closeButton.onClick.AddListener(() => gameObject.SetActive(false));
             importCameraToggle.onValueChanged.AddListener(value => _importCameras = value);
+            enableEditToggle.onValueChanged.AddListener(value=>
+            {
+                colmapDirField.interactable = value;
+                _enableEdit = value;
+            });
             createAssetButton.onClick.AddListener(() =>
             {
-                CreateAsset();
-                // 关闭窗口，显示提示
-                MainUIManager.ShowTip(_errorMessage ??
-                                      $"Successfully Create Asset Data for {_inputFile} at {_outputFolder}");
-                SceneLoader.LoadGaussianSplatAssets();
-                gameObject.SetActive(false);
+                // 显示提示
+                MainUIManager.ShowTip( CreateAsset()?
+                                      $"Successfully Create Asset Data for {_inputFile} at {_outputDir}": _errorMessage,false);
+                StartCoroutine(SceneLoader.LoadGaussianSplatAssets());
             });
         }
 
         /// <summary>
         /// 配置文件浏览逻辑
         /// </summary>
-        /// <param name="input">浏览输入(或是输出)文件夹</param>
+        /// <param name="isDirectory">选择文件夹或是文件</param>
         /// <returns></returns>
-        private IEnumerator HandleFileBrowser()
+        private IEnumerator HandleFileBrowser(bool isDirectory)
         {
-            yield return FileBrowser.WaitForLoadDialog(FileBrowser.PickMode.Files, allowMultiSelection: false);
+            yield return FileBrowser.WaitForLoadDialog(
+                isDirectory ? FileBrowser.PickMode.Folders : FileBrowser.PickMode.Files, allowMultiSelection: false);
             if (FileBrowser.Success)
             {
-                inputFileField.text = FileBrowser.Result[0];
+                if (isDirectory)
+                {
+                    colmapDirField.text = FileBrowser.Result[0];
+                }
+                else
+                {
+                    inputFileField.text = FileBrowser.Result[0];
+                }
             }
         }
 
@@ -403,17 +427,19 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
         /// <param name="inputSplats">点云原始数据</param>
         /// <param name="filePath">存储文件路径</param>
         /// <param name="dataHash">hash校验码</param>
-        private void CreatePositionsData(NativeArray<InputSplatData> inputSplats, string filePath, ref Hash128 dataHash)
+        /// <param name="formatPos">位置数据格式</param>
+        private static void CreatePositionsData(NativeArray<InputSplatData> inputSplats, string filePath,
+            ref Hash128 dataHash, GaussianSplatAsset.VectorFormat formatPos)
         {
-            int dataLen = inputSplats.Length * GaussianSplatAsset.GetVectorSize(_formatPos);
+            int dataLen = inputSplats.Length * GaussianSplatAsset.GetVectorSize(formatPos);
             dataLen = NextMultipleOf(dataLen, 8); // serialized as ulong
             NativeArray<byte> data = new(dataLen, Allocator.TempJob);
 
             GaussianSplatAssetCreator.CreatePositionsDataJob job = new GaussianSplatAssetCreator.CreatePositionsDataJob
             {
                 m_Input = inputSplats,
-                m_Format = _formatPos,
-                m_FormatSize = GaussianSplatAsset.GetVectorSize(_formatPos),
+                m_Format = formatPos,
+                m_FormatSize = GaussianSplatAsset.GetVectorSize(formatPos),
                 m_Output = data
             };
             job.Schedule(inputSplats.Length, 8192).Complete();
@@ -433,10 +459,12 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
         /// <param name="filePath">存储文件路径</param>
         /// <param name="dataHash">hash校验码</param>
         /// <param name="splatSHIndices">聚类后的SH数据</param>
-        private void CreateOtherData(NativeArray<InputSplatData> inputSplats, string filePath, ref Hash128 dataHash,
-            NativeArray<int> splatSHIndices)
+        /// <param name="formatScale">缩放数据格式</param>
+        private static void CreateOtherData(NativeArray<InputSplatData> inputSplats, string filePath,
+            ref Hash128 dataHash,
+            NativeArray<int> splatSHIndices, GaussianSplatAsset.VectorFormat formatScale)
         {
-            int formatSize = GaussianSplatAsset.GetOtherSizeNoSHIndex(_formatScale);
+            int formatSize = GaussianSplatAsset.GetOtherSizeNoSHIndex(formatScale);
             if (splatSHIndices.IsCreated)
                 formatSize += 2;
             int dataLen = inputSplats.Length * formatSize;
@@ -448,7 +476,7 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
             {
                 m_Input = inputSplats,
                 m_SplatSHIndices = splatSHIndices,
-                m_ScaleFormat = _formatScale,
+                m_ScaleFormat = formatScale,
                 m_FormatSize = formatSize,
                 m_Output = data
             };
@@ -468,7 +496,9 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
         /// <param name="inputSplats">点云原始数据</param>
         /// <param name="filePath">存储文件路径</param>
         /// <param name="dataHash">hash校验码</param>
-        private void CreateColorData(NativeArray<InputSplatData> inputSplats, string filePath, ref Hash128 dataHash)
+        /// <param name="formatColor">颜色数据格式</param>
+        private static void CreateColorData(NativeArray<InputSplatData> inputSplats, string filePath,
+            ref Hash128 dataHash, GaussianSplatAsset.ColorFormat formatColor)
         {
             var (width, height) = GaussianSplatAsset.CalcTextureSize(inputSplats.Length);
             NativeArray<float4> data = new(width * height, Allocator.TempJob);
@@ -479,9 +509,9 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
             job.Schedule(inputSplats.Length, 8192).Complete();
 
             dataHash.Append(data);
-            dataHash.Append((int)_formatColor);
+            dataHash.Append((int)formatColor);
 
-            GraphicsFormat gfxFormat = GaussianSplatAsset.ColorFormatToGraphics(_formatColor);
+            GraphicsFormat gfxFormat = GaussianSplatAsset.ColorFormatToGraphics(formatColor);
             int dstSize = (int)GraphicsFormatUtility.ComputeMipmapSize(width, height, gfxFormat);
 
             if (GraphicsFormatUtility.IsCompressedFormat(gfxFormat))
@@ -503,7 +533,7 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
                     width = width,
                     height = height,
                     inputData = data,
-                    format = _formatColor,
+                    format = formatColor,
                     outputData = new NativeArray<byte>(dstSize, Allocator.TempJob),
                     formatBytesPerPixel = dstSize / width / height
                 };
@@ -522,9 +552,10 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
         /// <param name="inputSplats">点云原始数据</param>
         /// <param name="filePath">存储文件路径</param>
         /// <param name="dataHash">hash校验码</param>
-        /// <param name="splatSHIndices">聚类后的SH数据</param>
-        private void CreateSHData(NativeArray<InputSplatData> inputSplats, string filePath, ref Hash128 dataHash,
-            NativeArray<GaussianSplatAsset.SHTableItemFloat16> clusteredSHs)
+        /// <param name="clusteredSHs">聚类后的SH数据</param>
+        /// <param name="formatSH">SH数据格式</param>
+        private static void CreateSHData(NativeArray<InputSplatData> inputSplats, string filePath, ref Hash128 dataHash,
+            NativeArray<GaussianSplatAsset.SHTableItemFloat16> clusteredSHs, GaussianSplatAsset.SHFormat formatSH)
         {
             if (clusteredSHs.IsCreated)
             {
@@ -532,12 +563,12 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
             }
             else
             {
-                int dataLen = (int)GaussianSplatAsset.CalcSHDataSize(inputSplats.Length, _formatSH);
+                int dataLen = (int)GaussianSplatAsset.CalcSHDataSize(inputSplats.Length, formatSH);
                 NativeArray<byte> data = new(dataLen, Allocator.TempJob);
                 GaussianSplatAssetCreator.CreateSHDataJob job = new GaussianSplatAssetCreator.CreateSHDataJob
                 {
                     m_Input = inputSplats,
-                    m_Format = _formatSH,
+                    m_Format = formatSH,
                     m_Output = data
                 };
                 job.Schedule(inputSplats.Length, 8192).Complete();
@@ -545,18 +576,117 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
                 data.Dispose();
             }
         }
-
         
+
         /// <summary>
-        /// 从文件创建ByteAsset
+        /// 用于编辑资产完成时从外部导入新资产。由于新资产没有colmap文件，所以不可再次编辑
         /// </summary>
-        /// <param name="filePath">文件路径</param>
-        /// <returns>创建的ByteAsset对象</returns>
-        public static ByteAsset CreateByteAssetFromFile(string filePath)
+        /// <param name="inputFile"></param>
+        /// <param name="outputDir"></param>
+        /// <param name="assetName"></param>
+        /// <param name="formatPos"></param>
+        /// <param name="formatScale"></param>
+        /// <param name="formatColor"></param>
+        /// <param name="formatSH"></param>
+        /// <returns></returns>
+        public static unsafe GaussianSplatAsset CreateAsset(string inputFile, string outputDir, string assetName,
+            GaussianSplatAsset.VectorFormat formatPos, GaussianSplatAsset.VectorFormat formatScale,
+            GaussianSplatAsset.ColorFormat formatColor, GaussianSplatAsset.SHFormat formatSH)
         {
-            byte[] bytes = File.ReadAllBytes(filePath);
-            ByteAsset byteAsset = new ByteAsset(bytes);
-            return byteAsset;
+            // 路径检查
+            if (string.IsNullOrWhiteSpace(inputFile))
+            {
+                return null;
+            }
+
+            if (string.IsNullOrWhiteSpace(outputDir))
+            {
+                return null;
+            }
+
+            if (Directory.Exists(outputDir))
+            {
+                return null;
+            }
+
+            // 创建文件夹
+            Directory.CreateDirectory(outputDir);
+            //导入相机参数（如有）
+            GaussianSplatAsset.CameraInfo[] cameras =
+                GaussianSplatAssetCreator.LoadJsonCamerasFile(inputFile, true);
+            // 读取数据
+            using NativeArray<InputSplatData> inputSplats = LoadInputSplatFile(inputFile, out _);
+            if (inputSplats.Length == 0)
+            {
+                return null;
+            }
+
+            // 并行计算场景边界范围
+            float3 boundsMin, boundsMax;
+            var boundsJob = new GaussianSplatAssetCreator.CalcBoundsJob
+            {
+                m_BoundsMin = &boundsMin,
+                m_BoundsMax = &boundsMax,
+                m_SplatData = inputSplats
+            };
+            boundsJob.Schedule().Complete();
+
+            // 对点云数据执行Morton排序以提高后续渲染等计算效率
+            GaussianSplatAssetCreator.ReorderMorton(inputSplats, boundsMin, boundsMax);
+
+            // SH聚类
+            NativeArray<int> splatSHIndices = default;
+            NativeArray<GaussianSplatAsset.SHTableItemFloat16> clusteredSHs = default;
+            if (formatSH >= GaussianSplatAsset.SHFormat.Cluster64k)
+            {
+                GaussianSplatAssetCreator.ClusterSHs(inputSplats, formatSH, out clusteredSHs, out splatSHIndices);
+            }
+
+            // 初始化GS asset
+            GaussianSplatAsset asset = ScriptableObject.CreateInstance<GaussianSplatAsset>();
+            asset.Initialize(inputSplats.Length, formatPos, formatScale, formatColor, formatSH, boundsMin,
+                boundsMax, cameras);
+            asset.name = assetName;
+
+            //生成Hash码用于校验
+            var dataHash = new Hash128((uint)asset.splatCount, (uint)asset.formatVersion, 0, 0);
+            //创建存储不同数据的二进制文件并保存到对应文件夹
+            string chunkPath = $"{outputDir}/{assetName}{Status.ChunkFileSuffix}";
+            string posPath = $"{outputDir}/{assetName}{Status.PositionFileSuffix}";
+            string otherPath = $"{outputDir}/{assetName}{Status.ScaleFileSuffix}";
+            string colorPath = $"{outputDir}/{assetName}{Status.ColorFileSuffix}";
+            string shPath = $"{outputDir}/{assetName}{Status.SHFileSuffix}";
+
+            bool useChunks = false;
+
+            CreatePositionsData(inputSplats, posPath, ref dataHash, formatPos);
+            CreateOtherData(inputSplats, otherPath, ref dataHash, splatSHIndices, formatScale);
+            CreateColorData(inputSplats, colorPath, ref dataHash, formatColor);
+            CreateSHData(inputSplats, shPath, ref dataHash, clusteredSHs, formatSH);
+            asset.SetDataHash(dataHash);
+            // 丢弃临时数据
+            splatSHIndices.Dispose();
+            clusteredSHs.Dispose();
+
+
+            asset.SetAssetFiles(outputDir, false, null,
+                ByteAsset.CreateByteAssetFromFile(posPath),
+                ByteAsset.CreateByteAssetFromFile(otherPath),
+                ByteAsset.CreateByteAssetFromFile(colorPath),
+                ByteAsset.CreateByteAssetFromFile(shPath));
+
+            var assetDataPath = $"{outputDir}/{assetName}{Status.SceneFileSuffixPlayer}";
+            BinaryFormatter formatter = new BinaryFormatter();
+            // 由于scriptableObject没有被标记为可序列化，因此需要使用自定义数据类实现外部存储
+            GaussianSplatAssetData assetData =
+                new GaussianSplatAssetData(asset, outputDir, false, useChunks, chunkPath, posPath, otherPath, colorPath,
+                    shPath);
+            using (FileStream stream = new FileStream(assetDataPath, FileMode.Create))
+            {
+                formatter.Serialize(stream, assetData);
+            }
+
+            return asset;
         }
 
         /// <summary>
@@ -572,22 +702,46 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
                 return null;
             }
 
-            if (string.IsNullOrWhiteSpace(_outputFolder))
+            if (string.IsNullOrWhiteSpace(_outputDir))
             {
-                _errorMessage = $"Invalid output folder '{_outputFolder}'";
+                _errorMessage = $"Invalid output folder '{_outputDir}'";
                 return null;
             }
 
-            // 创建文件夹
-            Directory.CreateDirectory(_outputFolder);
+            if (Directory.Exists(_outputDir))
+            {
+                _errorMessage = $"Output folder name '{_outputDir}' already exists";
+                return null;
+            }
+
+            if (_enableEdit && !Directory.Exists(_colmapDir))
+            {
+                _errorMessage = $"Invalid colmap folder {_colmapDir}";
+                return null;
+            }
+
             // 创建提示信息
             TipsManager infoTips = MainUIManager.ShowTip("Creating Asset...").GetComponent<TipsManager>();
             infoTips.SetButtonInteractable(false);
+
+
+            // 创建文件夹(包括colmap)
+            Directory.CreateDirectory(_outputDir);
+            if (_enableEdit)
+            {
+                // 复制Colmap数据（如有）
+                string colmapOutputDir = Path.Join(_outputDir, Status.ColmapDirName);
+                if (!FileHelper.CopyFolder(_colmapDir, colmapOutputDir, true, out _errorMessage))
+                {
+                    return null;
+                }
+            }
+
             //导入相机参数（如有）
             GaussianSplatAsset.CameraInfo[] cameras =
                 GaussianSplatAssetCreator.LoadJsonCamerasFile(_inputFile, _importCameras);
             // 读取数据
-            using NativeArray<InputSplatData> inputSplats = LoadInputSplatFile(_inputFile);
+            using NativeArray<InputSplatData> inputSplats = LoadInputSplatFile(_inputFile, out _errorMessage);
             if (inputSplats.Length == 0)
             {
                 Destroy(infoTips.gameObject);
@@ -628,11 +782,11 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
             //生成Hash码用于校验
             var dataHash = new Hash128((uint)asset.splatCount, (uint)asset.formatVersion, 0, 0);
             //创建存储不同数据的二进制文件并保存到对应文件夹
-            string chunkPath = $"{_outputFolder}/{_assetName}_chk.bytes";
-            string posPath = $"{_outputFolder}/{_assetName}_pos.bytes";
-            string otherPath = $"{_outputFolder}/{_assetName}_oth.bytes";
-            string colorPath = $"{_outputFolder}/{_assetName}_col.bytes";
-            string shPath = $"{_outputFolder}/{_assetName}_shs.bytes";
+            string chunkPath = $"{_outputDir}/{_assetName}{Status.ChunkFileSuffix}";
+            string posPath = $"{_outputDir}/{_assetName}{Status.PositionFileSuffix}";
+            string otherPath = $"{_outputDir}/{_assetName}{Status.ScaleFileSuffix}";
+            string colorPath = $"{_outputDir}/{_assetName}{Status.ColorFileSuffix}";
+            string shPath = $"{_outputDir}/{_assetName}{Status.SHFileSuffix}";
 
             bool useChunks = isUsingChunks;
             if (useChunks)
@@ -640,10 +794,10 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
                 GaussianSplatAssetCreator.CreateChunkData(inputSplats, chunkPath, ref dataHash);
             }
 
-            CreatePositionsData(inputSplats, posPath, ref dataHash);
-            CreateOtherData(inputSplats, otherPath, ref dataHash, splatSHIndices);
-            CreateColorData(inputSplats, colorPath, ref dataHash);
-            CreateSHData(inputSplats, shPath, ref dataHash, clusteredSHs);
+            CreatePositionsData(inputSplats, posPath, ref dataHash, formatPos);
+            CreateOtherData(inputSplats, otherPath, ref dataHash, splatSHIndices, formatScale);
+            CreateColorData(inputSplats, colorPath, ref dataHash, formatColor);
+            CreateSHData(inputSplats, shPath, ref dataHash, clusteredSHs, formatSH);
             asset.SetDataHash(dataHash);
             // 丢弃临时数据
             splatSHIndices.Dispose();
@@ -652,19 +806,21 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
             // 绑定子数据文件和主文件
             infoTips.SetTipText("Setup data onto asset");
 
-            asset.SetAssetFiles(useChunks ? CreateByteAssetFromFile(chunkPath) : null,
-                CreateByteAssetFromFile(posPath),
-                CreateByteAssetFromFile(otherPath),
-                CreateByteAssetFromFile(colorPath),
-                CreateByteAssetFromFile(shPath));
+            asset.SetAssetFiles(_outputDir, _enableEdit, useChunks ? ByteAsset.CreateByteAssetFromFile(chunkPath) : null,
+                ByteAsset.CreateByteAssetFromFile(posPath),
+                ByteAsset.CreateByteAssetFromFile(otherPath),
+                ByteAsset.CreateByteAssetFromFile(colorPath),
+                ByteAsset.CreateByteAssetFromFile(shPath));
             // 保存主文件
             infoTips.SetTipText("Saving Asset File");
 
-            var assetDataPath = $"{_outputFolder}/{_assetName}{Status.SceneFileSuffixPlayer}";
+            var assetDataPath = $"{_outputDir}/{_assetName}{Status.SceneFileSuffixPlayer}";
             BinaryFormatter formatter = new BinaryFormatter();
             // 由于scriptableObject没有被标记为可序列化，因此需要使用自定义数据类实现外部存储
             GaussianSplatAssetData assetData =
-                new GaussianSplatAssetData(asset, useChunks, chunkPath, posPath, otherPath, colorPath, shPath);
+                new GaussianSplatAssetData(asset, _outputDir, _enableEdit, useChunks, chunkPath, posPath, otherPath,
+                    colorPath,
+                    shPath);
             using (FileStream stream = new FileStream(assetDataPath, FileMode.Create))
             {
                 formatter.Serialize(stream, assetData);
@@ -679,13 +835,14 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
         /// 从文件读入点云原始数据
         /// </summary>
         /// <param name="filePath">点云文件路径</param>
+        /// <param name="errorMessage">错误信息提示</param>
         /// <returns></returns>
-        private NativeArray<InputSplatData> LoadInputSplatFile(string filePath)
+        private static NativeArray<InputSplatData> LoadInputSplatFile(string filePath, out string errorMessage)
         {
             NativeArray<InputSplatData> data = default;
             if (!File.Exists(filePath))
             {
-                _errorMessage = $"Did not find {filePath} file";
+                errorMessage = $"Did not find {filePath} file";
                 return data;
             }
 
@@ -695,9 +852,10 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
             }
             catch (Exception ex)
             {
-                _errorMessage = ex.Message;
+                errorMessage = ex.Message;
             }
 
+            errorMessage = "";
             return data;
         }
 
@@ -708,54 +866,7 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
             InitializeFileUI();
             InitializeOthers();
 
-            _outputFolder = Path.Join(Status.SceneFileRootPlayer, outputFolderField.text);
-        }
-    }
-
-    
-
-    public static class FolderNameValidator
-    {
-        // 验证文件夹名称是否合法（单层）
-        public static bool ValidateFolderName(string folderName, out string errorMessage)
-        {
-            errorMessage = "";
-
-            // 空值检查
-            if (string.IsNullOrWhiteSpace(folderName))
-            {
-                errorMessage = "Folder name cannot be empty";
-                return false;
-            }
-
-            // 检查路径分隔符
-            if (folderName.Contains(Path.DirectorySeparatorChar.ToString()) ||
-                folderName.Contains(Path.AltDirectorySeparatorChar.ToString()))
-            {
-                errorMessage =
-                    $"Name cannot contain path separators ({Path.DirectorySeparatorChar} or {Path.AltDirectorySeparatorChar})";
-                return false;
-            }
-
-            // 检查相对路径符号
-            if (folderName.Trim() == "." || folderName.Trim() == "..")
-            {
-                errorMessage = "Cannot use '.' or '..' as name";
-                return false;
-            }
-
-            // 检查非法字符
-            char[] invalidChars = Path.GetInvalidFileNameChars();
-            foreach (char c in invalidChars)
-            {
-                if (folderName.Contains(c.ToString()))
-                {
-                    errorMessage = $"Name contains invalid character: '{c}'";
-                    return false;
-                }
-            }
-
-            return true;
+            _outputDir = Path.Join(Status.SceneFileRootPlayer, outputFolderField.text);
         }
     }
 }
