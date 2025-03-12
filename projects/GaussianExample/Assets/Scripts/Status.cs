@@ -90,6 +90,9 @@ public class Status : MonoBehaviour
     public const string ColorFileSuffix = "_col.bytes";
     public const string SHFileSuffix = "_shs.bytes";
     
+    // GaussianEditor脚本及conda环境路径
+    public const string CondaEnvName = "GaussianEditor";
+    public const string PythonScript = @"\\wsl.localhost\Ubuntu\home\Illli\GaussianEditor\launch.py";
 
     // 刚切换场景时需要加载的GS资产
     public static readonly List<GaussianSplatAsset> GaussianSplatAssets = new();
@@ -121,13 +124,7 @@ public class Status : MonoBehaviour
         playMode = PlayMode.View;
         Debug.Log("view");
     }
-
-    public static void SwitchEditMode()
-    {
-        playMode = PlayMode.Edit;
-        // gsRenderer.EditDeselectAll();
-        Debug.Log("edit");
-    }
+    
 
     public static void EndSelectEdit()
     {
@@ -160,7 +157,6 @@ public enum PlayMode
     None,
     View,
     Select,
-    Edit
 }
 
 public enum EditMode

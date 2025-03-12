@@ -128,7 +128,6 @@ namespace GSTestScene
             //切换模式
             _userAction.Player.SwitchViewMode.performed += ctx => { Status.SwitchViewMode(); };
             _userAction.Player.SwitchSelectMode.performed += ctx => { Status.SwitchSelectMode(); };
-            _userAction.Player.SwitchEditMode.performed += ctx => { Status.SwitchEditMode(); };
         }
         /// <summary>
         /// 绑定移动输入

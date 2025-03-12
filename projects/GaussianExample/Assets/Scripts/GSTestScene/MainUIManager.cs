@@ -46,7 +46,7 @@ namespace GSTestScene
             //配置按钮功能
             viewButton.onClick.AddListener(Status.SwitchViewMode);
             selectButton.onClick.AddListener(Status.SwitchSelectMode);
-            editButton.onClick.AddListener(Status.SwitchEditMode);
+            editButton.onClick.AddListener(GetComponent<EditManager>().HandleEditClick);
             exportButton.onClick.AddListener(ExportPlyFile);
             //配置滚动条属性
             Slider[] sliders = uiCanvas.GetComponentsInChildren<Slider>();
@@ -69,15 +69,25 @@ namespace GSTestScene
             GaussianSplatRenderer.onSplatCountChanged += UpdateSplatInfo;
             GaussianSplatRenderer.onEditSselectedSplatsChanged += UpdateSplatInfo;
             // 切换模式时按钮样式调整
-            Status.PlayModeChanged += (_, mode) =>
-            {
+            Status.PlayModeChanged += OnPlayModeUpdate;
+            //切换到浏览模式
+            Status.SwitchViewMode();
+            //初始化场景信息
+            UpdateSplatInfo(gsRenderer,EventArgs.Empty);
+        }
+
+        private void OnDestroy()
+        {
+            Status.PlayModeChanged -= OnPlayModeUpdate;
+            GaussianSplatRenderer.onEditSselectedSplatsChanged -= UpdateSplatInfo;
+            GaussianSplatRenderer.onSplatCountChanged -= UpdateSplatInfo;
+        }
+
+        private void OnPlayModeUpdate(Object _,PlayMode mode)
+        {
+            
                 switch (mode)
                 {
-                    case PlayMode.Edit:
-                        SetButtonColor(viewButton, DisableColor);
-                        SetButtonColor(selectButton, DisableColor);
-                        SetButtonColor(editButton, EnableColor);
-                        break;
                     case PlayMode.Select:
                         SetButtonColor(viewButton, DisableColor);
                         SetButtonColor(selectButton, EnableColor);
@@ -93,11 +103,7 @@ namespace GSTestScene
                     default:
                         break;
                 }
-            };
-            //切换到浏览模式
-            Status.SwitchViewMode();
-            //初始化场景信息
-            UpdateSplatInfo(gsRenderer,EventArgs.Empty);
+            
         }
 
         /// <summary>
