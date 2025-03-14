@@ -377,14 +377,19 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
             enableEditToggle.onValueChanged.AddListener(value=>
             {
                 colmapDirField.interactable = value;
+                browseColmapButton.interactable = value;
                 _enableEdit = value;
             });
             createAssetButton.onClick.AddListener(() =>
             {
+                GaussianSplatAsset asset = CreateAsset();
                 // 显示提示
-                MainUIManager.ShowTip( CreateAsset()?
+                MainUIManager.ShowTip( asset?
                                       $"Successfully Create Asset Data for {_inputFile} at {_outputDir}": _errorMessage,false);
-                StartCoroutine(SceneLoader.LoadGaussianSplatAssets());
+                if (asset)
+                {
+                    StartCoroutine(SceneLoader.LoadGaussianSplatAssets());
+                }
             });
         }
 
@@ -710,7 +715,7 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
 
             if (Directory.Exists(_outputDir))
             {
-                _errorMessage = $"Output folder name '{_outputDir}' already exists";
+                _errorMessage = $"Output folder '{_outputDir}' already exists";
                 return null;
             }
 
@@ -735,6 +740,11 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
                 {
                     return null;
                 }
+                // 复制点云文件到文件夹中
+                string plyOutputDir = Path.Join(_outputDir, Status.PlyFileLocalDir);
+                string plyOutputPath = Path.Join(plyOutputDir, Status.PlyFileName);
+                Directory.CreateDirectory(plyOutputDir);
+                File.Copy(_inputFile,plyOutputPath,true);
             }
 
             //导入相机参数（如有）

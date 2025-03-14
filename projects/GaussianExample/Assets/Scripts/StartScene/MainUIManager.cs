@@ -11,7 +11,7 @@ namespace StartScene
     {
         // 主面板
         public GameObject mainCanvas;
-        private static GameObject MainCanvas; 
+        private static GameObject _mainCanvas; 
         
         // 场景概要面板预制件
         public GameObject scenePanelPrefab;
@@ -46,11 +46,12 @@ namespace StartScene
 
             if (mainCanvas)
             {
-                MainCanvas = mainCanvas;
+                _mainCanvas = mainCanvas;
             }
         }
+        
 
-        private void OnEnable()
+        private void Start()
         {
             createButton.onClick.AddListener(HandleClickCreateButton);
             loadButton.onClick.AddListener(HandleClickLoadButton);
@@ -98,7 +99,7 @@ namespace StartScene
         /// <returns>生成的组件实例</returns>
         public static GameObject ShowTip(string tips, bool unique=true)
         {
-            if(!TipsPanelPrefab||!MainCanvas)return null;
+            if(!TipsPanelPrefab||!_mainCanvas)return null;
             if (unique)
             {
                 if (TipsPanel)
@@ -106,12 +107,12 @@ namespace StartScene
                     Destroy(TipsPanel);
                 }
 
-                TipsPanel = Instantiate(TipsPanelPrefab, MainCanvas.transform);
+                TipsPanel = Instantiate(TipsPanelPrefab, _mainCanvas.transform);
                 TipsPanel.GetComponent<TipsManager>().SetTipText(tips);
                 return TipsPanel;
             }
 
-            GameObject  tempTipsPanel= Instantiate(TipsPanelPrefab, MainCanvas.transform);
+            GameObject  tempTipsPanel= Instantiate(TipsPanelPrefab, _mainCanvas.transform);
             tempTipsPanel.GetComponent<TipsManager>().SetTipText(tips);
             return tempTipsPanel;
 

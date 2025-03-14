@@ -51,7 +51,7 @@
                     "initialStateCheck": false
                 },
                 {
-                    "name": "Switch Edit Mode",
+                    "name": "Show Edit Panel",
                     "type": "Button",
                     "id": "eb2ec678-f0ac-45f4-9dd7-b8084be5abe0",
                     "expectedControlType": "Button",
@@ -157,6 +157,15 @@
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": true
+                },
+                {
+                    "name": "Escape",
+                    "type": "Button",
+                    "id": "01851522-2fca-49bb-968d-81ba503f4644",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
                 }
             ],
             "bindings": [
@@ -200,7 +209,7 @@
                     "interactions": "Press",
                     "processors": "",
                     "groups": "",
-                    "action": "Switch Edit Mode",
+                    "action": "Show Edit Panel",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -406,7 +415,7 @@
                     "name": "",
                     "id": "f29da3b0-196e-49b4-94ee-04aaeaac70ca",
                     "path": "<Keyboard>/g",
-                    "interactions": "Press",
+                    "interactions": "",
                     "processors": "",
                     "groups": "",
                     "action": "G key",
@@ -421,6 +430,17 @@
                     "processors": "",
                     "groups": "",
                     "action": "Mouse Wheel",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "bcdf72ba-21df-4ce0-b04e-6e2b71927373",
+                    "path": "Keyboard/Escape",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Escape",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

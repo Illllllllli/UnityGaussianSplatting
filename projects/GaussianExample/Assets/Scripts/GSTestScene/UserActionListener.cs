@@ -3,7 +3,6 @@ using GaussianSplatting.Runtime;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.Serialization;
 
 //监听鼠标事件
 namespace GSTestScene
@@ -17,7 +16,7 @@ namespace GSTestScene
         private bool _isMousePressed;
         private Vector3 _cameraMovement = Vector3.zero;
 
-        private GaussianSplatRenderer _gsRenderer;
+        private GaussianSplatRenderer gsRenderer => gaussianSplats?.GetComponent<GaussianSplatRenderer>();
         private Vector2 _previousMousePosition = Vector2.zero;
 
         private UserAction _userAction;
@@ -35,17 +34,17 @@ namespace GSTestScene
             {
                 _isMousePressed = true;
                 //当前为选择模式且鼠标不在UI上且不是在编辑状态下
-                if (Status.playMode == PlayMode.Select &&Status.editMode==EditMode.None&& !GsTools.IsPointerOverUIObject())
+                if (Status.playMode == PlayMode.Select &&Status.selectEditMode==SelectEditMode.None&& !GsTools.IsPointerOverUIObject())
                 {
                     // 检测修饰键
                     if (!((Input.GetKey(KeyCode.LeftShift)) || (Input.GetKey(KeyCode.RightShift)) ||
                           (Input.GetKey(KeyCode.LeftControl)) ||
                           (Input.GetKey(KeyCode.RightControl))))
                     {
-                        _gsRenderer.EditDeselectAll();
+                        gsRenderer.EditDeselectAll();
                     }
 
-                    _gsRenderer.EditStoreSelectionMouseDown();
+                    gsRenderer.EditStoreSelectionMouseDown();
                     GaussianSplatRendererEditor.RepaintAll();
                     //更新拖拽的起始坐标
                     _mouseStartSelectPos = new Vector2(Input.mousePosition.x, Input.mousePosition.y);
@@ -70,7 +69,7 @@ namespace GSTestScene
                 if (!_isMousePressed) return;
                 if (!Status.isInteractive) return;
                 //选择模式下移动（选择GS）
-                if (Status.playMode == PlayMode.Select && Status.editMode==EditMode.None)
+                if (Status.playMode == PlayMode.Select && Status.selectEditMode==SelectEditMode.None)
                 {
                     bool isSubtract = ((Input.GetKey(KeyCode.LeftControl)) || (Input.GetKey(KeyCode.RightControl)));
                     Vector2 rectStart = _mouseStartSelectPos;
@@ -91,7 +90,7 @@ namespace GSTestScene
                     Rect rect = GsTools.FromToRect(rectStart, rectEnd);
                     Vector2 rectMin = HandleUtility.GUIPointToScreenPixelCoordinate(rect.min);
                     Vector2 rectMax = HandleUtility.GUIPointToScreenPixelCoordinate(rect.max);
-                    _gsRenderer.EditUpdateSelection(rectMin, rectMax, mainCamera, isSubtract);
+                    gsRenderer.EditUpdateSelection(rectMin, rectMax, mainCamera, isSubtract);
                     GaussianSplatRendererEditor.RepaintAll();
                 }
                 //其他模式下旋转视角
@@ -158,28 +157,28 @@ namespace GSTestScene
             {
                 if (Status.playMode == PlayMode.Select)
                 {
-                    _gsRenderer.EditInvertSelection();
+                    gsRenderer.EditInvertSelection();
                 }
             };
             _userAction.Player.CtrlA.performed += ctx =>
             {
                 if (Status.playMode == PlayMode.Select)
                 {
-                    _gsRenderer.EditSelectAll();
+                    gsRenderer.EditSelectAll();
                 }
             };
             _userAction.Player.CtrlShiftA.performed += ctx =>
             {
                 if (Status.playMode == PlayMode.Select)
                 {
-                    _gsRenderer.EditDeselectAll();
+                    gsRenderer.EditDeselectAll();
                 }
             };
             _userAction.Player.Delete.performed += ctx =>
             {
                 if (Status.playMode == PlayMode.Select)
                 {
-                    _gsRenderer.EditDeleteSelected();
+                    gsRenderer.EditDeleteSelected();
                 }
             };
         }
@@ -192,7 +191,7 @@ namespace GSTestScene
             // 绑定鼠标监听输入
             _userAction.Player.MouseMovement.performed += ctx =>
             {
-                if (Status.editMode == EditMode.Translate)
+                if (Status.selectEditMode == SelectEditMode.Translate)
                 {
                     // 获取鼠标偏移
                     Vector2 mouseDelta = ctx.ReadValue<Vector2>();
@@ -201,15 +200,15 @@ namespace GSTestScene
                     // 根据相机参数将偏移转换为世界空间位移
                     Vector3 deltaWorld = GsTools.ScreenDeltaToWorldDelta(mouseDelta, mainCamera);
                     // 转换为本地空间位移
-                    Vector3 deltaLocal = _gsRenderer.transform.InverseTransformDirection(deltaWorld);
+                    Vector3 deltaLocal = gsRenderer.transform.InverseTransformDirection(deltaWorld);
                     // 应用位移
-                    _gsRenderer.EditTranslateSelection(deltaLocal);
+                    gsRenderer.EditTranslateSelection(deltaLocal);
                 }
             };
             _userAction.Player.MouseLeftClick.performed += ctx =>
             {
                 // 在位移编辑模式下，点击鼠标左键以结束位移编辑
-                if (Status.editMode == EditMode.Translate)
+                if (Status.selectEditMode == SelectEditMode.Translate)
                 {
                     Status.EndSelectEdit();
                     // 清空位移累积量
@@ -224,11 +223,17 @@ namespace GSTestScene
                 Status.StartSelectTranslateEdit();
             };
         }
-        
-        private void OnEnable()
+
+        /// <summary>
+        /// 绑定其他输入（如打开编辑面板/弹出回到主菜单页面等）
+        /// </summary>
+        private void BindOtherInput()
         {
-            //获取gs渲染对象
-            _gsRenderer = gaussianSplats.GetComponent<GaussianSplatRenderer>();
+            _userAction.Player.ShowEditPanel.performed += ctx => GetComponent<EditManager>().HandleEditClick();
+            _userAction.Player.Escape.performed += ctx => GetComponent<MainUIManager>().SetBackCheckPanelActive(true);
+        }
+        private void Start()
+        {
             // 初始化
             _userAction = new UserAction();
             _userAction.Enable();
@@ -237,6 +242,7 @@ namespace GSTestScene
             BindMovementInput();
             BindSelectFuncInput();
             BindSelectModeInput();
+            BindOtherInput();
         }
 
 

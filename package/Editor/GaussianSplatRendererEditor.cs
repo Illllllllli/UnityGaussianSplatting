@@ -394,7 +394,7 @@ namespace GaussianSplatting.Editor
             return new Bounds { center = center, extents = ext };
         }
 
-        public static unsafe void ExportPlyFile(GaussianSplatRenderer gs, bool bakeTransform)
+        public static unsafe void ExportPlyFile(GaussianSplatRenderer gs, bool bakeTransform,Action onSuccess=null)
         {
             var path = EditorUtility.SaveFilePanel(
                 "Export Gaussian Splat PLY file", "", $"{gs.asset.name}-edit.ply", "ply");
@@ -443,8 +443,8 @@ namespace GaussianSplatting.Editor
                     fs.Write(new ReadOnlySpan<byte>(ptr, kSplatSize));
                 }
             }
-
             Debug.Log($"Exported PLY {path} with {aliveCount:N0} splats");
+            onSuccess?.Invoke();
         }
     }
 }

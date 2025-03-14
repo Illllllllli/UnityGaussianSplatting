@@ -10,6 +10,7 @@ using UnityEngine.EventSystems;
 
 public class Status : MonoBehaviour
 {
+    private static Status _containerInstance;
     //灵敏度方位旋转
     private static float _rotateSensitivity;
 
@@ -50,25 +51,25 @@ public class Status : MonoBehaviour
         {
             if (_playMode == value) return;
             _playMode = value;
-            PlayModeChanged?.Invoke(null, value);
+            PlayModeChanged?.Invoke(_playMode, value);
         }
     }
 
     // note: 当前只有平移功能
     // 编辑模式改变时触发回调
-    public static event EventHandler<EditMode> EditModeChanged;
+    public static event EventHandler<SelectEditMode> EditModeChanged;
 
-    private static EditMode _editMode = EditMode.None;
+    private static SelectEditMode _selectEditMode = SelectEditMode.None;
 
     // 编辑模式(平移/旋转/缩放)
-    public static EditMode editMode
+    public static SelectEditMode selectEditMode
     {
-        get => _editMode;
+        get => _selectEditMode;
         private set
         {
-            if (_editMode == value) return;
-            _editMode = value;
-            EditModeChanged?.Invoke(_editMode, value);
+            if (_selectEditMode == value) return;
+            _selectEditMode = value;
+            EditModeChanged?.Invoke(_selectEditMode, value);
         }
     }
 
@@ -83,6 +84,9 @@ public class Status : MonoBehaviour
     public const string TemporaryDir = ".tmp";
     // 存储可编辑文件的colmap相关文件的文件夹
     public const string ColmapDirName = "colmap";
+    // 存储编辑时需要用到的点云文件路径
+    public const string PlyFileLocalDir = "ply";
+    public const string PlyFileName = "point_clouds.ply";
 
     public const string ChunkFileSuffix = "_chk.bytes";
     public const string PositionFileSuffix = "_pos.bytes";
@@ -92,7 +96,14 @@ public class Status : MonoBehaviour
     
     // GaussianEditor脚本及conda环境路径
     public const string CondaEnvName = "GaussianEditor";
-    public const string PythonScript = @"\\wsl.localhost\Ubuntu\home\Illli\GaussianEditor\launch.py";
+    public const string EditorFolder = @"\\wsl.localhost\Ubuntu\home\Illli\GaussianEditor";
+    public const string PythonScript = "launch.py";
+    public const string AddConfigPath = "configs/add.yaml";
+    public const string DeleteConfigPath = "configs/del-ctn.yaml";
+    public const string EditCtnConfigPath = "configs/edit-ctn.yaml";// for controlnet
+    public const string EditN2NConfigPath = "configs/edit-n2n.yaml";// for instructpix2pix
+    public const string CacheDirName = "cache";
+
 
     // 刚切换场景时需要加载的GS资产
     public static readonly List<GaussianSplatAsset> GaussianSplatAssets = new();
@@ -128,18 +139,28 @@ public class Status : MonoBehaviour
 
     public static void EndSelectEdit()
     {
-        editMode = EditMode.None;
+        selectEditMode = SelectEditMode.None;
     }
 
     public static void StartSelectTranslateEdit()
     {
-        editMode = EditMode.Translate;
+        selectEditMode = SelectEditMode.Translate;
     }
 
     private void Awake()
     {
+        if (!_containerInstance)
+        {
+            _containerInstance = this;
+            DontDestroyOnLoad(this);
+        }
+        else
+        {
+            Destroy(gameObject);
+        }
+
         SceneFileRootPlayer = Path.Join(Application.persistentDataPath, SceneFileName);
-        DontDestroyOnLoad(this);
+        
     }
 
     /// <summary>
@@ -159,7 +180,7 @@ public enum PlayMode
     Select,
 }
 
-public enum EditMode
+public enum SelectEditMode
 {
     None,
     Translate,

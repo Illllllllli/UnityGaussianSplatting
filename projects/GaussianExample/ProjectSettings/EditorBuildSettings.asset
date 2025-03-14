@@ -8,4 +8,7 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/GSTestScene.unity
     guid: ca13622d0f7f243a3a3020f3b8b0650f
+  - enabled: 1
+    path: Assets/Start.unity
+    guid: 1a3bce277965cc947812be4fe5cd64b1
   m_configObjects: {}

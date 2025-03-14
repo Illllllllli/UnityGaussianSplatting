@@ -23,6 +23,7 @@ namespace GSTestScene
                 // （由于其他脚本还没有适配多个物体，先这么写）
                 GetComponent<MainUIManager>().gaussianSplats = gaussianSplats;
                 GetComponent<UserActionListener>().gaussianSplats = gaussianSplats;
+                GetComponent<EditManager>().gaussianSplats = gaussianSplats;
             }
 
             GetComponent<MainUIManager>().enabled = true;

@@ -73,7 +73,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""initialStateCheck"": false
                 },
                 {
-                    ""name"": ""Switch Edit Mode"",
+                    ""name"": ""Show Edit Panel"",
                     ""type"": ""Button"",
                     ""id"": ""eb2ec678-f0ac-45f4-9dd7-b8084be5abe0"",
                     ""expectedControlType"": ""Button"",
@@ -179,6 +179,15 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": true
+                },
+                {
+                    ""name"": ""Escape"",
+                    ""type"": ""Button"",
+                    ""id"": ""01851522-2fca-49bb-968d-81ba503f4644"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
                 }
             ],
             ""bindings"": [
@@ -222,7 +231,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""interactions"": ""Press"",
                     ""processors"": """",
                     ""groups"": """",
-                    ""action"": ""Switch Edit Mode"",
+                    ""action"": ""Show Edit Panel"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
                 },
@@ -428,7 +437,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""name"": """",
                     ""id"": ""f29da3b0-196e-49b4-94ee-04aaeaac70ca"",
                     ""path"": ""<Keyboard>/g"",
-                    ""interactions"": ""Press"",
+                    ""interactions"": """",
                     ""processors"": """",
                     ""groups"": """",
                     ""action"": ""G key"",
@@ -445,6 +454,17 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""action"": ""Mouse Wheel"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""bcdf72ba-21df-4ce0-b04e-6e2b71927373"",
+                    ""path"": ""Keyboard/Escape"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Escape"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
                 }
             ]
         }
@@ -458,7 +478,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         m_Player_MouseWheel = m_Player.FindAction("Mouse Wheel", throwIfNotFound: true);
         m_Player_SwitchViewMode = m_Player.FindAction("Switch View Mode", throwIfNotFound: true);
         m_Player_SwitchSelectMode = m_Player.FindAction("Switch Select Mode", throwIfNotFound: true);
-        m_Player_SwitchEditMode = m_Player.FindAction("Switch Edit Mode", throwIfNotFound: true);
+        m_Player_ShowEditPanel = m_Player.FindAction("Show Edit Panel", throwIfNotFound: true);
         m_Player_Wkey = m_Player.FindAction("W key", throwIfNotFound: true);
         m_Player_Akey = m_Player.FindAction("A key", throwIfNotFound: true);
         m_Player_Skey = m_Player.FindAction("S key", throwIfNotFound: true);
@@ -470,6 +490,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         m_Player_CtrlShiftA = m_Player.FindAction("Ctrl Shift A", throwIfNotFound: true);
         m_Player_Delete = m_Player.FindAction("Delete", throwIfNotFound: true);
         m_Player_Gkey = m_Player.FindAction("G key", throwIfNotFound: true);
+        m_Player_Escape = m_Player.FindAction("Escape", throwIfNotFound: true);
     }
 
     public void Dispose()
@@ -536,7 +557,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
     private readonly InputAction m_Player_MouseWheel;
     private readonly InputAction m_Player_SwitchViewMode;
     private readonly InputAction m_Player_SwitchSelectMode;
-    private readonly InputAction m_Player_SwitchEditMode;
+    private readonly InputAction m_Player_ShowEditPanel;
     private readonly InputAction m_Player_Wkey;
     private readonly InputAction m_Player_Akey;
     private readonly InputAction m_Player_Skey;
@@ -548,6 +569,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
     private readonly InputAction m_Player_CtrlShiftA;
     private readonly InputAction m_Player_Delete;
     private readonly InputAction m_Player_Gkey;
+    private readonly InputAction m_Player_Escape;
     public struct PlayerActions
     {
         private @UserAction m_Wrapper;
@@ -557,7 +579,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         public InputAction @MouseWheel => m_Wrapper.m_Player_MouseWheel;
         public InputAction @SwitchViewMode => m_Wrapper.m_Player_SwitchViewMode;
         public InputAction @SwitchSelectMode => m_Wrapper.m_Player_SwitchSelectMode;
-        public InputAction @SwitchEditMode => m_Wrapper.m_Player_SwitchEditMode;
+        public InputAction @ShowEditPanel => m_Wrapper.m_Player_ShowEditPanel;
         public InputAction @Wkey => m_Wrapper.m_Player_Wkey;
         public InputAction @Akey => m_Wrapper.m_Player_Akey;
         public InputAction @Skey => m_Wrapper.m_Player_Skey;
@@ -569,6 +591,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         public InputAction @CtrlShiftA => m_Wrapper.m_Player_CtrlShiftA;
         public InputAction @Delete => m_Wrapper.m_Player_Delete;
         public InputAction @Gkey => m_Wrapper.m_Player_Gkey;
+        public InputAction @Escape => m_Wrapper.m_Player_Escape;
         public InputActionMap Get() { return m_Wrapper.m_Player; }
         public void Enable() { Get().Enable(); }
         public void Disable() { Get().Disable(); }
@@ -593,9 +616,9 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
             @SwitchSelectMode.started += instance.OnSwitchSelectMode;
             @SwitchSelectMode.performed += instance.OnSwitchSelectMode;
             @SwitchSelectMode.canceled += instance.OnSwitchSelectMode;
-            @SwitchEditMode.started += instance.OnSwitchEditMode;
-            @SwitchEditMode.performed += instance.OnSwitchEditMode;
-            @SwitchEditMode.canceled += instance.OnSwitchEditMode;
+            @ShowEditPanel.started += instance.OnShowEditPanel;
+            @ShowEditPanel.performed += instance.OnShowEditPanel;
+            @ShowEditPanel.canceled += instance.OnShowEditPanel;
             @Wkey.started += instance.OnWkey;
             @Wkey.performed += instance.OnWkey;
             @Wkey.canceled += instance.OnWkey;
@@ -629,6 +652,9 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
             @Gkey.started += instance.OnGkey;
             @Gkey.performed += instance.OnGkey;
             @Gkey.canceled += instance.OnGkey;
+            @Escape.started += instance.OnEscape;
+            @Escape.performed += instance.OnEscape;
+            @Escape.canceled += instance.OnEscape;
         }
 
         private void UnregisterCallbacks(IPlayerActions instance)
@@ -648,9 +674,9 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
             @SwitchSelectMode.started -= instance.OnSwitchSelectMode;
             @SwitchSelectMode.performed -= instance.OnSwitchSelectMode;
             @SwitchSelectMode.canceled -= instance.OnSwitchSelectMode;
-            @SwitchEditMode.started -= instance.OnSwitchEditMode;
-            @SwitchEditMode.performed -= instance.OnSwitchEditMode;
-            @SwitchEditMode.canceled -= instance.OnSwitchEditMode;
+            @ShowEditPanel.started -= instance.OnShowEditPanel;
+            @ShowEditPanel.performed -= instance.OnShowEditPanel;
+            @ShowEditPanel.canceled -= instance.OnShowEditPanel;
             @Wkey.started -= instance.OnWkey;
             @Wkey.performed -= instance.OnWkey;
             @Wkey.canceled -= instance.OnWkey;
@@ -684,6 +710,9 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
             @Gkey.started -= instance.OnGkey;
             @Gkey.performed -= instance.OnGkey;
             @Gkey.canceled -= instance.OnGkey;
+            @Escape.started -= instance.OnEscape;
+            @Escape.performed -= instance.OnEscape;
+            @Escape.canceled -= instance.OnEscape;
         }
 
         public void RemoveCallbacks(IPlayerActions instance)
@@ -708,7 +737,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         void OnMouseWheel(InputAction.CallbackContext context);
         void OnSwitchViewMode(InputAction.CallbackContext context);
         void OnSwitchSelectMode(InputAction.CallbackContext context);
-        void OnSwitchEditMode(InputAction.CallbackContext context);
+        void OnShowEditPanel(InputAction.CallbackContext context);
         void OnWkey(InputAction.CallbackContext context);
         void OnAkey(InputAction.CallbackContext context);
         void OnSkey(InputAction.CallbackContext context);
@@ -720,5 +749,6 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         void OnCtrlShiftA(InputAction.CallbackContext context);
         void OnDelete(InputAction.CallbackContext context);
         void OnGkey(InputAction.CallbackContext context);
+        void OnEscape(InputAction.CallbackContext context);
     }
 }
