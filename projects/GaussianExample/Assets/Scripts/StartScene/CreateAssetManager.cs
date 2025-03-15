@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
+using System.Threading.Tasks;
 using GaussianSplatting.Editor;
 using GaussianSplatting.Editor.Utils;
 using GaussianSplatting.Runtime;
@@ -735,7 +736,7 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
             if (_enableEdit)
             {
                 // 复制Colmap数据（如有）
-                string colmapOutputDir = Path.Join(_outputDir, Status.ColmapDirName);
+                string colmapOutputDir = Path.Join(_outputDir, Status.ColmapDir);
                 if (!FileHelper.CopyFolder(_colmapDir, colmapOutputDir, true, out _errorMessage))
                 {
                     return null;

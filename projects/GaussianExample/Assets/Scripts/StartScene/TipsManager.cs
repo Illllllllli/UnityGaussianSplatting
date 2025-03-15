@@ -21,7 +21,7 @@ namespace StartScene
 
         private void Close()
         {
-            Status.UpdateIsInteractive(true);
+            
             Destroy(gameObject);
         }
 
@@ -30,6 +30,11 @@ namespace StartScene
             closeButton.onClick.AddListener(Close);
             // 弹出提示信息时，不能和场景交互
             Status.UpdateIsInteractive(false);
+        }
+
+        private void OnDestroy()
+        {
+            Status.UpdateIsInteractive(true);
         }
     }
 }

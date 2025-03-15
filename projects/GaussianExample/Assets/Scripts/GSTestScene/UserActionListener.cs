@@ -67,7 +67,8 @@ namespace GSTestScene
             _userAction.Player.MouseMovement.performed += ctx =>
             {
                 if (!_isMousePressed) return;
-                if (!Status.isInteractive) return;
+                if (Status.isInteractive<0) return;
+                if(GsTools.IsPointerOverUIObject())return;
                 //选择模式下移动（选择GS）
                 if (Status.playMode == PlayMode.Select && Status.selectEditMode==SelectEditMode.None)
                 {
@@ -110,6 +111,7 @@ namespace GSTestScene
             // 鼠标滚轮滑动
             _userAction.Player.MouseWheel.performed += ctx =>
             {
+                if(Status.isInteractive<0)return;
                 float scrollDelta = ctx.ReadValue<Vector2>().y;
                 // 反转坐标轴
                 float newFoV = mainCamera.fieldOfView - (scrollDelta / Status.MouseScrollBase);
@@ -246,10 +248,14 @@ namespace GSTestScene
         }
 
 
+        /// <summary>
+        /// 在这里面进行相机移动
+        /// </summary>
         private void Update()
         {
             // 判断当前是否有修饰键
             if (Keyboard.current.shiftKey.isPressed || Keyboard.current.ctrlKey.isPressed) return;
+            if(Status.isInteractive<0)return;
             //相机移动
             if (Vector3.Magnitude(_cameraMovement) > 0.1f)
             {

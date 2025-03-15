@@ -37,8 +37,8 @@ namespace GSTestScene
         public Button viewButton;
         public Button selectButton;
         public Button editButton;
-
         public Button exportButton;
+        public Button editInfoButton;
 
         // 标识GS数量
         public TextMeshProUGUI splatCountText;
@@ -66,6 +66,11 @@ namespace GSTestScene
             selectButton.onClick.AddListener(Status.SwitchSelectMode);
             editButton.onClick.AddListener(GetComponent<EditManager>().HandleEditClick);
             exportButton.onClick.AddListener(ExportPlyFile);
+            editInfoButton.onClick.AddListener(()=>
+            {
+                GameObject editInfoPanel = GetComponent<EditManager>().commandInfoPanel;
+                editInfoPanel.SetActive(!editInfoPanel.activeSelf);
+            });
             
             cancelBackButton.onClick.AddListener(() => SetBackCheckPanelActive(false));
             doBackButton.onClick.AddListener(BackToStartScene);

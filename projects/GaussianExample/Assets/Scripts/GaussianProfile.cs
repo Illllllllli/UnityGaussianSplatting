@@ -44,7 +44,7 @@ public abstract class GaussianProfile
 
         if (ScriptPath.Length<=0||ConfigPath.Length<=0||DataSourcePath.Length<=0||GsSourcePath.Length<=0)
         {
-            command = "internal file path not completed";
+            command = "Internal file path not completed";
             return false;
         }
         if (MaxTrainSteps <= 0)
@@ -54,7 +54,7 @@ public abstract class GaussianProfile
         }
         
         command =
-                $"{ScriptPath} --config {ConfigPath} --train --gpu {Gpuid} data.source={DataSourcePath} system.gs_source={GsSourcePath}] " +
+                $"{ScriptPath} --config {ConfigPath} --train --gpu {Gpuid} data.source={DataSourcePath} system.gs_source={GsSourcePath} " +
                 $" system.gs_lr_scaler={GsLrScaler} system.gs_final_lr_scaler={GsFinalLrScaler} system.color_lr_scaler={GsColorLrScaler} system.opacity_lr_scaler={GsOpacityLrScaler} system.scaling_lr_scaler={GsScalingLrScaler} system.rotation_lr_scaler={GsRotationLrScaler} "+
                 $" system.cache_overwrite={CacheOverwrite} trainer.max_steps={MaxTrainSteps} system.loggers.wandb.enable={EnableWandb} ";
         return true;
@@ -104,8 +104,13 @@ public class EditProfile : GaussianProfile
     {
         if (GetGeneralCommand(out string generalCommand))
         {
+            if (string.IsNullOrWhiteSpace(EditPrompt) || string.IsNullOrWhiteSpace(SegPrompt))
+            {
+                command = "Please input valid prompts";
+                return false;
+            }
             command = generalCommand + $"system.prompt_processor.prompt={PrepareString(EditPrompt)} system.seg_prompt={PrepareString(SegPrompt)} " +
-                      $"system.anchor_weight_init_g0={AnchorWeightInitG0} system.anchor_weight_init{AnchorWeightInit} system.anchor_weight_multiplier={AnchorWeightMultiplier} " +
+                      $"system.anchor_weight_init_g0={AnchorWeightInitG0} system.anchor_weight_init={AnchorWeightInit} system.anchor_weight_multiplier={AnchorWeightMultiplier} " +
                       $"system.loss.lambda_anchor_color={LambdaAnchorColor} system.loss.lambda_anchor_geo={LambdaAnchorGeo} system.loss.lambda_anchor_scale={LambdaAnchorScale} system.loss.lambda_anchor_opacity={LambdaAnchorOpacity} " +
                       $"system.max_densify_percent={MaxDensifyPercent} system.densify_from_iter={DensifyFromIter} system.densify_until_iter={DensifyUntilIter} system.densification_interval={DensificationInterval} ";
             return true;
@@ -123,21 +128,15 @@ public class AddProfile : GaussianProfile
     // 修补指令
     public string RefinePrompt;
     // 缓存文件夹
-    private const string CacheDir = Status.CacheDirName;
+    private const string CacheDir = Status.CacheDir;
     
     public override bool GetCommand(out string command)
     {
         if (GetGeneralCommand(out string generalCommand))
         {
-            if (InpaintPrompt.Length == 0)
+            if (string.IsNullOrWhiteSpace(InpaintPrompt) || string.IsNullOrWhiteSpace(RefinePrompt))
             {
-                command = "Please input Inpaint Prompt";
-                return false;
-            }
-
-            if (RefinePrompt.Length == 0)
-            {
-                command = "Please input Refine Prompt";
+                command = "Please input valid prompts";
                 return false;
             }
             command = generalCommand + $"system.inpaint_prompt={PrepareString(InpaintPrompt)} system.refine_prompt={PrepareString(RefinePrompt)} system.cache_dir={PrepareString(CacheDir)} ";
@@ -194,9 +193,14 @@ public class DeleteProfile : GaussianProfile
     {
         if (GetGeneralCommand(out string generalCommand))
         {
+            if (string.IsNullOrWhiteSpace(InpaintPrompt) || string.IsNullOrWhiteSpace(SegPrompt))
+            {
+                command = "Please input valid prompts";
+                return false;
+            }
             command = generalCommand + $"system.inpaint_prompt={PrepareString(InpaintPrompt)} system.seg_prompt={PrepareString(SegPrompt)} " +
                       $"system.fix_holes={FixHoles} system.inpaint_scale={InpaintScale} system.mask_dilate={MaskDilate} "+
-                      $"system.anchor_weight_init_g0={AnchorWeightInitG0} system.anchor_weight_init{AnchorWeightInit} system.anchor_weight_multiplier={AnchorWeightMultiplier} " +
+                      $"system.anchor_weight_init_g0={AnchorWeightInitG0} system.anchor_weight_init={AnchorWeightInit} system.anchor_weight_multiplier={AnchorWeightMultiplier} " +
                       $"system.loss.lambda_anchor_color={LambdaAnchorColor} system.loss.lambda_anchor_geo={LambdaAnchorGeo} system.loss.lambda_anchor_scale={LambdaAnchorScale} system.loss.lambda_anchor_opacity={LambdaAnchorOpacity} " +
                       $"system.max_densify_percent={MaxDensifyPercent} system.densify_from_iter={DensifyFromIter} system.densify_until_iter={DensifyUntilIter} system.densification_interval={DensificationInterval} ";
             return true;

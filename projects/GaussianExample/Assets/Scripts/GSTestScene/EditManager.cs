@@ -1,8 +1,11 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using GaussianSplatting.Runtime;
 using TMPro;
@@ -18,18 +21,25 @@ namespace GSTestScene
         [Header("Gaussian Splat Asset Renderer")]
         public GameObject gaussianSplats;
 
-        [Header("Panels and Buttons")] public GameObject editPanel;
-        public GameObject commandInfoPanel;
+        [Header("Edit Panels and Buttons")] public GameObject editPanel;
+
         public GameObject editModePanel;
         public GameObject addModePanel;
         public GameObject deleteModePanel;
         public Button closeButton;
         public Button editButton;
-        public Button cancelButton;
+
+
+        [Header("Command Info UI Components")] public GameObject commandInfoPanel;
+        public Button clearLogButton;
+        public Button cancelEditButton;
+        public TextMeshProUGUI editLogTextPrefab;
+
+        public GameObject logContainer;
 
         //公用部分UI
         [Header("General UI Components")] public TMP_Dropdown switchEditModeDropdown;
-        
+
         public Slider maxTrainStepsSlider;
         public TextMeshProUGUI maxTrainStepNumber;
 
@@ -140,9 +150,9 @@ namespace GSTestScene
 
         private GaussianSplatAsset gaussianSplatAsset => gaussianSplats.GetComponent<GaussianSplatRenderer>().m_Asset;
         private GaussianProfile _profile;
-        private WslPythonRunner _wslPythonRunner;
+        private WslPythonRunner _wslPythonRunner = new WslPythonRunner();
 
-        private EditMode _editMode;
+        private EditMode _editMode = EditMode.Edit;
 
         private enum EditMode
         {
@@ -154,9 +164,10 @@ namespace GSTestScene
 
         private void Start()
         {
-            InitializeUsageUI();
+            InitializeEditUsageUI();
             InitializeEditModeSwitchUI();
             InitializeEditDetailUI();
+            InitializeCommandInfoUI();
         }
 
         public void HandleEditClick()
@@ -173,17 +184,11 @@ namespace GSTestScene
             }
         }
 
-        private void HandleCancelClick()
-        {
-            if(_wslPythonRunner==null)return;
-            _wslPythonRunner.CancelCommand(out string result);
-            Debug.Log(result);
-        }
 
         /// <summary>
         /// 初始化一些基本组件UI响应
         /// </summary>
-        private void InitializeUsageUI()
+        private void InitializeEditUsageUI()
         {
             closeButton.onClick.AddListener(() =>
             {
@@ -191,7 +196,6 @@ namespace GSTestScene
                 Status.UpdateIsInteractive(true);
             });
             editButton.onClick.AddListener(StartEdit);
-            cancelButton.onClick.AddListener(HandleCancelClick);
         }
 
         /// <summary>
@@ -200,14 +204,16 @@ namespace GSTestScene
         private void InitializeEditModeSwitchUI()
         {
             switchEditModeDropdown.options.Clear();
-            switchEditModeDropdown.options.AddRange(Enum.GetNames(typeof(EditMode)).Select(enumName => new TMP_Dropdown.OptionData(enumName))
+            switchEditModeDropdown.options.AddRange(Enum.GetNames(typeof(EditMode))
+                .Select(enumName => new TMP_Dropdown.OptionData(enumName))
                 .ToList());
-            
+
             switchEditModeDropdown.onValueChanged.AddListener(value =>
             {
                 editModePanel.SetActive(false);
                 addModePanel.SetActive(false);
                 deleteModePanel.SetActive(false);
+
                 switch ((EditMode)value)
                 {
                     case EditMode.Edit:
@@ -222,6 +228,8 @@ namespace GSTestScene
                     default:
                         throw new ArgumentOutOfRangeException(nameof(value), value, null);
                 }
+
+                _editMode = (EditMode)value;
             });
         }
 
@@ -295,6 +303,15 @@ namespace GSTestScene
         }
 
         /// <summary>
+        /// 初始化编辑日志及控制面板UUI
+        /// </summary>
+        private void InitializeCommandInfoUI()
+        {
+            cancelEditButton.onClick.AddListener(TryCancelEdit);
+            clearLogButton.onClick.AddListener(ClearLogs);
+        }
+
+        /// <summary>
         /// 根据UI内容更新当前模式配置
         /// </summary>
         private void UpdateProfile()
@@ -316,6 +333,7 @@ namespace GSTestScene
                 default:
                     throw new ArgumentOutOfRangeException();
             }
+
             UpdateGeneralProfile();
         }
 
@@ -326,12 +344,20 @@ namespace GSTestScene
         {
             _profile.ScriptPath =
                 WslPythonRunner.ConvertToWslPath(Path.Join(Status.EditorFolder, Status.PythonScript));
+            string configPath = _editMode switch
+            {
+                EditMode.Edit => Status.EditN2NConfigPath,
+                EditMode.Add => Status.AddConfigPath,
+                EditMode.Delete => Status.DeleteConfigPath,
+                _ => throw new ArgumentOutOfRangeException()
+            };
             _profile.ConfigPath =
-                WslPythonRunner.ConvertToWslPath(Path.Join(Status.EditorFolder, Status.AddConfigPath));
+                WslPythonRunner.ConvertToWslPath(Path.Join(Status.EditorFolder, configPath));
             _profile.DataSourcePath =
-                WslPythonRunner.ConvertToWslPath(Path.Join(gaussianSplatAsset.assetDataPath, Status.ColmapDirName));
+                WslPythonRunner.ConvertToWslPath(Path.Join(gaussianSplatAsset.assetDataPath, Status.ColmapDir));
             _profile.GsSourcePath =
-                WslPythonRunner.ConvertToWslPath(Path.Join(gaussianSplatAsset.assetDataPath, Status.PlyFileLocalDir,Status.PlyFileName));
+                WslPythonRunner.ConvertToWslPath(Path.Join(gaussianSplatAsset.assetDataPath, Status.PlyFileLocalDir,
+                    Status.PlyFileName));
             _profile.MaxTrainSteps = (uint)Mathf.RoundToInt(maxTrainStepsSlider.value);
             _profile.GsLrScaler = gsLrSlider.value;
             _profile.GsFinalLrScaler = gsFinalLrSlider.value;
@@ -346,7 +372,7 @@ namespace GSTestScene
         /// </summary>
         private void UpdateEditProfile()
         {
-            if(_profile is not EditProfile editProfile)return;
+            if (_profile is not EditProfile editProfile) return;
             editProfile.EditPrompt = editPromptField.text;
             editProfile.SegPrompt = editSegPromptField.text;
             editProfile.AnchorWeightInitG0 = editAnchorInitG0Slider.value;
@@ -367,7 +393,7 @@ namespace GSTestScene
         /// </summary>
         private void UpdateAddProfile()
         {
-            if(_profile is not AddProfile addProfile)return;
+            if (_profile is not AddProfile addProfile) return;
             addProfile.InpaintPrompt = addInpaintPromptField.text;
             addProfile.RefinePrompt = refinePromptField.text;
         }
@@ -377,7 +403,7 @@ namespace GSTestScene
         /// </summary>
         private void UpdateDeleteProfile()
         {
-            if(_profile is not DeleteProfile deleteProfile)return;
+            if (_profile is not DeleteProfile deleteProfile) return;
             deleteProfile.InpaintPrompt = deleteInpaintPromptField.text;
             deleteProfile.SegPrompt = deleteSegPromptField.text;
             deleteProfile.FixHoles = fixHoleToggle.isOn;
@@ -403,13 +429,117 @@ namespace GSTestScene
         {
             UpdateProfile();
             _wslPythonRunner = new WslPythonRunner();
-            if (_profile.GetCommand(out string command))
+            bool checkProfile = _profile.GetCommand(out string command);
+            Debug.Log(command);
+            string workPath = WslPythonRunner.ConvertToWslPath(Status.CondaEnvName);
+            if (checkProfile)
             {
-                await _wslPythonRunner.ExecuteWslCommand($"source activate {Status.CondaEnvName} && python {command}");
+                commandInfoPanel.SetActive(true);
+                editPanel.SetActive(false);
+                await _wslPythonRunner.ExecuteWslCommand($"source activate {Status.CondaEnvName} && cd {workPath} && python {command}",
+                    OnFinished, DataReceived, ErrorReceived);
             }
             else
             {
-                Debug.Log(command);
+                MainUIManager.ShowTip(command);
+            }
+
+            return;
+
+            void DataReceived(Object _, DataReceivedEventArgs args)
+            {
+                if (args?.Data == null) return;
+                string data = WslPythonRunner.ReplaceIncompatibleCharacters(args.Data);
+                UpdateLog(false, data);
+                if (data.StartsWith(Status.PlyUpdateFlag))
+                {
+                    UpdateGaussianOnScene();
+                }
+            }
+
+            void ErrorReceived(Object _, DataReceivedEventArgs args)
+            {
+                if (args?.Data == null) return;
+                string data = WslPythonRunner.ReplaceIncompatibleCharacters(args.Data);
+                UpdateLog(true, data);
+            }
+
+            void OnFinished(int exitCode)
+            {
+                string notice = exitCode switch
+                {
+                    0 => "Edit finished successfully",
+                    1 => "Edit was stopped by errors",
+                    2 => "Edit was cancelled",
+                    _ => throw new ArgumentOutOfRangeException(nameof(exitCode), exitCode, null)
+                };
+
+                MainUIManager.ShowTip(notice);
+                Status.IsEditing = false;
+            }
+        }
+
+        /// <summary>
+        /// 尝试取消编辑
+        /// </summary>
+        private void TryCancelEdit()
+        {
+            _wslPythonRunner.CancelCommand(out string result);
+            MainUIManager.ShowTip(result);
+        }
+
+        /// <summary>
+        /// 在滚动视图更新日志
+        /// </summary>
+        /// <param name="isError">是否是错误信息</param>
+        /// <param name="log">要显示的日志</param>
+        private void UpdateLog(bool isError, string log)
+        {
+            List<Transform> children = logContainer.GetComponentsInChildren<Transform>().Skip(1).ToList();
+            // 控制最大日志条目数量100
+            if (children.Count >= 100)
+            {
+                Destroy(children[0].gameObject);
+            }
+
+            // 判断当前滚动视图是否在最底端
+            ScrollRect scrollRect = logContainer.GetComponentInParent<ScrollRect>();
+            bool isAtEnd = scrollRect.verticalNormalizedPosition < 0.05;
+            // 添加日志并强制刷新布局
+            TextMeshProUGUI text = Instantiate(editLogTextPrefab, logContainer.transform);
+            text.SetText(log);
+            if (isError)
+            {
+                text.color = Color.red;
+            }
+
+            Canvas.ForceUpdateCanvases();
+            // 在下一帧判断是否滚动到底部
+            StartCoroutine(ForceScrollToBottom());
+
+            IEnumerator ForceScrollToBottom()
+            {
+                // 等待渲染完成
+                yield return new WaitForEndOfFrame();
+                // 自动滚动到底部
+                if (isAtEnd)
+                {
+                    scrollRect.verticalNormalizedPosition = 0;
+                }
+
+                yield break;
+            }
+        }
+
+        /// <summary>
+        /// 清除滚动视图中的日志
+        /// </summary>
+        private void ClearLogs()
+        {
+            List<Transform> children = logContainer.GetComponentsInChildren<Transform>().Skip(1).ToList();
+            foreach (Transform child in children)
+            {
+                Destroy(child.gameObject);
             }
         }
 
@@ -418,6 +548,12 @@ namespace GSTestScene
         /// </summary>
         private void UpdateGaussianOnScene()
         {
+            Debug.Log("update gaussian");
+        }
+
+        private void OnDestroy()
+        {
+            TryCancelEdit();
         }
     }
 }
@@ -432,24 +568,32 @@ public class WslPythonRunner
     /// </summary>
     public bool CancelCommand(out string result)
     {
-        if (_wslProcess is { HasExited: false })
+        try
         {
-            try
+            if (_wslProcess is { HasExited: false })
             {
-                _wslProcess.Kill();
-                _tcs.SetCanceled();
-                result = "Cancel command successfully";
-                return true;
+                try
+                {
+                    _wslProcess?.Kill();
+                    _tcs?.SetCanceled();
+                    result = "Cancel command successfully";
+                    return true;
+                }
+
+                catch (Exception e)
+                {
+                    result = $"Cancel command failed : {e}";
+                    return false;
+                }
             }
-            catch (Exception e)
-            {
-                result = $"Cancel command failed : {e}";
-                return false;
-            }
+        }
+        catch (Exception)
+        {
+            // ignored
         }
 
         result = "No running command or command has exited";
-        return false;
+        return true;
     }
 
     /// <summary>
@@ -460,12 +604,15 @@ public class WslPythonRunner
     /// <param name="dataReceived">有输出到来时的回调</param>
     /// <param name="errorReceived">有错误到来时的回调</param>
     /// <param name="logOutput">是否在控制台输出</param>
-    public async Task ExecuteWslCommand(string command, Action<bool> onFinished = null,
+    public async Task ExecuteWslCommand(string command, Action<int> onFinished = null,
         Action<Object, DataReceivedEventArgs> dataReceived = null,
         Action<Object, DataReceivedEventArgs> errorReceived = null, bool logOutput = true)
     {
+        StringBuilder outputs = new StringBuilder();
+        StringBuilder errors = new StringBuilder();
         using (_wslProcess = new Process())
         {
+            _tcs = new TaskCompletionSource<bool>();
             _wslProcess.StartInfo = new ProcessStartInfo
             {
                 FileName = "wsl",
@@ -475,27 +622,37 @@ public class WslPythonRunner
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true,
-                StandardOutputEncoding = Encoding.UTF8,
+                StandardOutputEncoding = Encoding.Unicode,
             };
             _wslProcess.EnableRaisingEvents = true;
 
             _wslProcess.OutputDataReceived += (s, e) =>
             {
-                AppendOutput(e.Data);
-                dataReceived?.Invoke(s, e);
+                ReplaceIncompatibleCharacters(e.Data);
+                AppendOutput(outputs, e.Data);
+                Status.RunOnMainThread(() => dataReceived?.Invoke(s, e));
             };
             _wslProcess.ErrorDataReceived += (s, e) =>
             {
-                AppendOutput(e.Data);
-                _tcs.TrySetResult(false);
-                errorReceived?.Invoke(s, e);
+                AppendOutput(errors, e.Data);
+                Status.RunOnMainThread(() => errorReceived?.Invoke(s, e));
             };
-            _wslProcess.Exited += (_,_) =>
+            _wslProcess.Exited += (_, _) =>
             {
                 _tcs.TrySetResult(true);
-                onFinished?.Invoke(true);
+                Status.RunOnMainThread(() =>
+                {
+                    // 判断是否运行出错
+                    if (_wslProcess.ExitCode != 0 || errors.ToString().Contains("Traceback"))
+                    {
+                        onFinished?.Invoke(1);
+                    }
+                    else
+                    {
+                        onFinished?.Invoke(0);
+                    }
+                });
             };
-
             _wslProcess.Start();
             _wslProcess.BeginOutputReadLine();
             _wslProcess.BeginErrorReadLine();
@@ -506,14 +663,17 @@ public class WslPythonRunner
             catch (TaskCanceledException)
             {
                 Debug.Log($"Command '{command}' has been canceled.");
+                Status.RunOnMainThread(() => onFinished?.Invoke(2));
             }
         }
 
 
         // 用于在控制台输出临时信息
-        void AppendOutput(string data)
+        void AppendOutput(StringBuilder stringBuilder, string data)
         {
+            data = ReplaceIncompatibleCharacters(data);
             if (string.IsNullOrEmpty(data)) return;
+            stringBuilder.Append(data);
             if (logOutput)
             {
                 Debug.Log($"[WSL] {data}");
@@ -532,5 +692,27 @@ public class WslPythonRunner
             .Replace("C:", "/mnt/c")
             .Replace("D:", "/mnt/d")
             .Replace(" ", "\\ ");
+    }
+
+    /// <summary>
+    /// 替换输出中Unity默认字体没有的字符
+    /// </summary>
+    /// <param name="input">原始输入字符串</param>
+    /// <returns>替换后的字符串</returns>
+    public static string ReplaceIncompatibleCharacters(string input)
+    {
+        // 正则表达式匹配 U+2588 至 U+2590 范围，排除允许的字符
+        string pattern = @"[\u001B\u2588-\u2590]";
+        string replaced = Regex.Replace(input, pattern, match =>
+        {
+            char c = match.Value[0];
+            // 允许保留的字符：█（2588）、▌（258C）、▐（2590）
+            if (c is '\u2588' or '\u258C' or '\u2590')
+            {
+                return c.ToString();
+            }
+            return c == '\u001B' ? "" : "█"; // 替换为可用字符（或自定义符号如 □）
+        });
+        return replaced;
     }
 }

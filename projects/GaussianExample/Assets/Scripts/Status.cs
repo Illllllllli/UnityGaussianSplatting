@@ -15,18 +15,18 @@ public class Status : MonoBehaviour
     private static float _rotateSensitivity;
 
     public static float rotateSensitivity =>
-        isInteractive ? _rotateSensitivity : 0f;
+        isInteractive>=0 ? _rotateSensitivity : 0f;
 
     //灵敏度方位移动
     private static float _translateSensitivity;
 
     public static float translateSensitivity =>
-        isInteractive ? _translateSensitivity : 0f;
+        isInteractive>=0 ? _translateSensitivity : 0f;
 
     // 框选编辑位移灵敏度
-    public static float EditTranslateSensitivity = 0.01f;
-    
-    
+    public const float EditTranslateSensitivity = 0.01f;
+
+
     // 基准/最小/最大FoV
     public const float BaseFoV = 30f;
     public const float CameraFovMin = 10f;
@@ -36,7 +36,9 @@ public class Status : MonoBehaviour
     
 
     // 检查当前鼠标状态能否与场景交互
-    public static bool isInteractive { get; private set; } = true;
+    public static int isInteractive { get; private set; } = 0;
+    // 存储当前是否在正编辑
+    public static bool IsEditing = false;
 
     //查看器模式改变时触发回调
     public static event EventHandler<PlayMode> PlayModeChanged;
@@ -83,7 +85,7 @@ public class Status : MonoBehaviour
     // 临时文件夹
     public const string TemporaryDir = ".tmp";
     // 存储可编辑文件的colmap相关文件的文件夹
-    public const string ColmapDirName = "colmap";
+    public const string ColmapDir = "colmap";
     // 存储编辑时需要用到的点云文件路径
     public const string PlyFileLocalDir = "ply";
     public const string PlyFileName = "point_clouds.ply";
@@ -102,12 +104,18 @@ public class Status : MonoBehaviour
     public const string DeleteConfigPath = "configs/del-ctn.yaml";
     public const string EditCtnConfigPath = "configs/edit-ctn.yaml";// for controlnet
     public const string EditN2NConfigPath = "configs/edit-n2n.yaml";// for instructpix2pix
-    public const string CacheDirName = "cache";
+    public const string CacheDir = "cache";
+    
+    // 点云文件更新相关
+    public const string PlyUpdateFlag = "[update]";
+    public const string PlyUpdateDir = "outputs/temp";
 
 
     // 刚切换场景时需要加载的GS资产
     public static readonly List<GaussianSplatAsset> GaussianSplatAssets = new();
-
+    
+    // 因为有一些UI操作只能在主线程进行，所以这里设置一个主线程任务队列
+    private static readonly Queue<Action> ExecutionQueue = new();
 
     public static void UpdateRotateSensitivity(float value)
     {
@@ -121,7 +129,7 @@ public class Status : MonoBehaviour
 
     public static void UpdateIsInteractive(bool value)
     {
-        isInteractive = value;
+        isInteractive +=value?1:-1;
     }
 
     public static void SwitchSelectMode()
@@ -145,6 +153,18 @@ public class Status : MonoBehaviour
     public static void StartSelectTranslateEdit()
     {
         selectEditMode = SelectEditMode.Translate;
+    }
+    
+    /// <summary>
+    ///  在主线程执行任务
+    /// </summary>
+    /// <param name="action">任务</param>
+    public static void RunOnMainThread(Action action)
+    {
+        lock (ExecutionQueue)
+        {
+            ExecutionQueue.Enqueue(action);
+        }
     }
 
     private void Awake()
@@ -170,6 +190,20 @@ public class Status : MonoBehaviour
     {
         GaussianSplatAssets.Clear();
         FileHelper.DeletePath(Path.Join(SceneFileRootPlayer, TemporaryDir),true,out _);
+    }
+    
+    /// <summary>
+    /// 逐项执行主线程任务队列中的任务
+    /// </summary>
+    public void Update()
+    {
+        lock (ExecutionQueue)
+        {
+            while (ExecutionQueue.Count > 0)
+            {
+                ExecutionQueue.Dequeue().Invoke();
+            }
+        }
     }
 }
 
@@ -252,7 +286,7 @@ internal static class GsTools
         Vector3 camUp = camera.transform.up;
         Vector3 moveDir = (camRight * screenDelta.x + camUp * screenDelta.y).normalized;
 
-        // 计算位移量（可根据正交/透视模式调整）
+        // 计算位移量
         float moveDistance = screenDelta.magnitude * Status.EditTranslateSensitivity;
         return moveDir * moveDistance;
     }
