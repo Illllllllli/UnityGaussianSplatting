@@ -82,13 +82,15 @@ public class Status : MonoBehaviour
     public static readonly string SceneFileRootEditor = Path.Join(Application.dataPath, "Resources", SceneFileName);
     public static string SceneFileRootPlayer;
     public const string SceneFileSuffixPlayer = ".dat";
-    // 临时文件夹
+    // 临时文件夹及临时点云文件
     public const string TemporaryDir = ".tmp";
+    public const string TemporaryPlyName = "editing";
+
     // 存储可编辑文件的colmap相关文件的文件夹
     public const string ColmapDir = "colmap";
     // 存储编辑时需要用到的点云文件路径
-    public const string PlyFileLocalDir = "ply";
-    public const string PlyFileName = "point_clouds.ply";
+    public const string AssetPlyFileLocalDir = "ply";
+    public const string AssetPlyFileName = "point_clouds.ply";
 
     public const string ChunkFileSuffix = "_chk.bytes";
     public const string PositionFileSuffix = "_pos.bytes";
@@ -108,7 +110,7 @@ public class Status : MonoBehaviour
     
     // 点云文件更新相关
     public const string PlyUpdateFlag = "[update]";
-    public const string PlyUpdateDir = "outputs/temp";
+    public const string EditorPlyUpdateDir = "outputs/temp";
 
 
     // 刚切换场景时需要加载的GS资产

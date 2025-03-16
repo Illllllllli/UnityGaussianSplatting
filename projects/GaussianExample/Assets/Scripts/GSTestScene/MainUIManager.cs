@@ -29,8 +29,8 @@ namespace GSTestScene
         public GameObject backCheckPanel;
         public Button doBackButton;
         public Button cancelBackButton;
-
-        private GaussianSplatRenderer gsRenderer => gaussianSplats.GetComponent<GaussianSplatRenderer>();
+        
+        private GaussianSplatRenderer gsRenderer => gaussianSplats?.GetComponent<GaussianSplatRenderer>();
 
 
         // 功能按钮
@@ -99,7 +99,10 @@ namespace GSTestScene
             //切换到浏览模式
             Status.SwitchViewMode();
             //初始化场景信息
-            UpdateSplatInfo(gsRenderer, EventArgs.Empty);
+            if (gaussianSplats)
+            {
+                UpdateSplatInfo(gsRenderer, EventArgs.Empty);
+            }
         }
 
         /// <summary>

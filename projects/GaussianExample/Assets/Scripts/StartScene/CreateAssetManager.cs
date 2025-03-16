@@ -582,22 +582,23 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
                 data.Dispose();
             }
         }
-        
+
 
         /// <summary>
         /// 用于编辑资产完成时从外部导入新资产。由于新资产没有colmap文件，所以不可再次编辑
         /// </summary>
-        /// <param name="inputFile"></param>
-        /// <param name="outputDir"></param>
-        /// <param name="assetName"></param>
-        /// <param name="formatPos"></param>
-        /// <param name="formatScale"></param>
-        /// <param name="formatColor"></param>
-        /// <param name="formatSH"></param>
+        /// <param name="inputFile">输入点云文件</param>
+        /// <param name="outputDir">输出文件夹</param>
+        /// <param name="assetName">资产名称</param>
+        /// <param name="formatPos">位置数据格式</param>
+        /// <param name="formatScale">缩放数据格式</param>
+        /// <param name="formatColor">颜色数据格式</param>
+        /// <param name="formatSH">SH数据格式</param>
+        /// <param name="overwrite">是否可覆盖。由于主要用于编辑过程临时更新场景因此默认为可覆盖</param>
         /// <returns></returns>
         public static unsafe GaussianSplatAsset CreateAsset(string inputFile, string outputDir, string assetName,
             GaussianSplatAsset.VectorFormat formatPos, GaussianSplatAsset.VectorFormat formatScale,
-            GaussianSplatAsset.ColorFormat formatColor, GaussianSplatAsset.SHFormat formatSH)
+            GaussianSplatAsset.ColorFormat formatColor, GaussianSplatAsset.SHFormat formatSH,bool overwrite=true)
         {
             // 路径检查
             if (string.IsNullOrWhiteSpace(inputFile))
@@ -610,7 +611,7 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
                 return null;
             }
 
-            if (Directory.Exists(outputDir))
+            if (!overwrite && Directory.Exists(outputDir))
             {
                 return null;
             }
@@ -742,8 +743,8 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
                     return null;
                 }
                 // 复制点云文件到文件夹中
-                string plyOutputDir = Path.Join(_outputDir, Status.PlyFileLocalDir);
-                string plyOutputPath = Path.Join(plyOutputDir, Status.PlyFileName);
+                string plyOutputDir = Path.Join(_outputDir, Status.AssetPlyFileLocalDir);
+                string plyOutputPath = Path.Join(plyOutputDir, Status.AssetPlyFileName);
                 Directory.CreateDirectory(plyOutputDir);
                 File.Copy(_inputFile,plyOutputPath,true);
             }

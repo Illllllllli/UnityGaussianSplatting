@@ -12,6 +12,8 @@ namespace StartScene
         public void SetTipText(string text)
         {
             tipText.SetText(text);
+            // 强制面板立即刷新布局
+            LayoutRebuilder.ForceRebuildLayoutImmediate(GetComponent<RectTransform>());
         }
 
         public void SetButtonInteractable(bool active)
@@ -21,9 +23,10 @@ namespace StartScene
 
         private void Close()
         {
-            
             Destroy(gameObject);
         }
+        
+        
 
         private void Start()
         {

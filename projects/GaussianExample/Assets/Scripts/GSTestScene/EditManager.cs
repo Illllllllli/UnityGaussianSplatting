@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using GaussianSplatting.Runtime;
+using StartScene;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -60,6 +61,8 @@ namespace GSTestScene
 
         public Slider gsRotationLrSlider;
         public TextMeshProUGUI gsRotationLrNumber;
+
+        public TMP_InputField scenePromptField;
 
         //编辑部分UI
         [Header("Edit Mode UI Components")] public TMP_InputField editPromptField;
@@ -160,7 +163,7 @@ namespace GSTestScene
             Add,
             Delete
         }
-
+        
 
         private void Start()
         {
@@ -356,8 +359,9 @@ namespace GSTestScene
             _profile.DataSourcePath =
                 WslPythonRunner.ConvertToWslPath(Path.Join(gaussianSplatAsset.assetDataPath, Status.ColmapDir));
             _profile.GsSourcePath =
-                WslPythonRunner.ConvertToWslPath(Path.Join(gaussianSplatAsset.assetDataPath, Status.PlyFileLocalDir,
-                    Status.PlyFileName));
+                WslPythonRunner.ConvertToWslPath(Path.Join(gaussianSplatAsset.assetDataPath,
+                    Status.AssetPlyFileLocalDir,
+                    Status.AssetPlyFileName));
             _profile.MaxTrainSteps = (uint)Mathf.RoundToInt(maxTrainStepsSlider.value);
             _profile.GsLrScaler = gsLrSlider.value;
             _profile.GsFinalLrScaler = gsFinalLrSlider.value;
@@ -365,6 +369,7 @@ namespace GSTestScene
             _profile.GsOpacityLrScaler = gsOpacityLrSlider.value;
             _profile.GsScalingLrScaler = gsScalingLrSlider.value;
             _profile.GsRotationLrScaler = gsRotationLrSlider.value;
+            _profile.ScenePrompt = scenePromptField.text;
         }
 
         /// <summary>
@@ -434,9 +439,14 @@ namespace GSTestScene
             string workPath = WslPythonRunner.ConvertToWslPath(Status.CondaEnvName);
             if (checkProfile)
             {
+                // UI和编辑器模式更新
                 commandInfoPanel.SetActive(true);
                 editPanel.SetActive(false);
-                await _wslPythonRunner.ExecuteWslCommand($"source activate {Status.CondaEnvName} && cd {workPath} && python {command}",
+                Status.SwitchViewMode();
+                MainUIManager.ShowTip("Edit started. Manual edits will not be saved until edit finished.");
+                // 调用编辑指令
+                await _wslPythonRunner.ExecuteWslCommand(
+                    $"source activate {Status.CondaEnvName} && cd {workPath} && python {command}",
                     OnFinished, DataReceived, ErrorReceived);
             }
             else
@@ -453,7 +463,7 @@ namespace GSTestScene
                 UpdateLog(false, data);
                 if (data.StartsWith(Status.PlyUpdateFlag))
                 {
-                    UpdateGaussianOnScene();
+                    StartCoroutine(UpdateGaussianOnScene());
                 }
             }
 
@@ -473,7 +483,6 @@ namespace GSTestScene
                     2 => "Edit was cancelled",
                     _ => throw new ArgumentOutOfRangeException(nameof(exitCode), exitCode, null)
                 };
-
                 MainUIManager.ShowTip(notice);
                 Status.IsEditing = false;
             }
@@ -526,8 +535,6 @@ namespace GSTestScene
                 {
                     scrollRect.verticalNormalizedPosition = 0;
                 }
-
-                yield break;
             }
         }
 
@@ -543,12 +550,44 @@ namespace GSTestScene
             }
         }
 
+
         /// <summary>
         /// 编辑过程中，实时更新场景中的GS模型
         /// </summary>
-        private void UpdateGaussianOnScene()
+        private IEnumerator UpdateGaussianOnScene()
         {
             Debug.Log("update gaussian");
+
+            MainUIManager.ShowTip("Updating Scene...").GetComponent<TipsManager>().SetButtonInteractable(false);
+            Status.UpdateIsInteractive(false);
+            yield return null;
+            try
+            {
+                UpdateGaussianAsset();
+                MainUIManager.ShowTip("Scene updated");
+            }
+            catch (Exception e)
+            {
+                MainUIManager.ShowTip($"Update failed : {e}");
+                Debug.LogError(e);
+            }
+            Status.UpdateIsInteractive(true);
+
+
+            void UpdateGaussianAsset()
+            {
+                string plyFile =
+                    Directory.GetFiles(Path.Join(Status.EditorFolder, Status.EditorPlyUpdateDir), "*.ply")[0];
+                string outputDir = Path.Join(Status.SceneFileRootPlayer, Status.TemporaryDir);
+                //创建临时新资产
+                GaussianSplatAsset tempAsset;
+                tempAsset = CreateAssetManager.CreateAsset(plyFile, outputDir,
+                    Status.TemporaryPlyName,
+                    gaussianSplatAsset.posFormat, gaussianSplatAsset.scaleFormat, gaussianSplatAsset.colorFormat,
+                    gaussianSplatAsset.shFormat);
+                //替换GSRenderer脚本中的资产引用
+                gaussianSplats.GetComponent<GaussianSplatRenderer>().m_Asset = tempAsset;
+            }
         }
 
         private void OnDestroy()
@@ -711,6 +750,7 @@ public class WslPythonRunner
             {
                 return c.ToString();
             }
+
             return c == '\u001B' ? "" : "█"; // 替换为可用字符（或自定义符号如 □）
         });
         return replaced;

@@ -16,7 +16,8 @@ public abstract class GaussianProfile
     public string GsSourcePath;
     // 最大训练步数
     public uint MaxTrainSteps;
-    // 
+    // 场景描述
+    public string ScenePrompt;
     // 学习率相关
     public float GsLrScaler;
     public float GsFinalLrScaler;
@@ -52,11 +53,18 @@ public abstract class GaussianProfile
             command = "Please input a valid Max Train Steps (>0)";
             return false;
         }
+
+        if (string.IsNullOrWhiteSpace(ScenePrompt))
+        {
+            command = "Please input valid prompts";
+            return false;
+        }
         
         command =
                 $"{ScriptPath} --config {ConfigPath} --train --gpu {Gpuid} data.source={DataSourcePath} system.gs_source={GsSourcePath} " +
-                $" system.gs_lr_scaler={GsLrScaler} system.gs_final_lr_scaler={GsFinalLrScaler} system.color_lr_scaler={GsColorLrScaler} system.opacity_lr_scaler={GsOpacityLrScaler} system.scaling_lr_scaler={GsScalingLrScaler} system.rotation_lr_scaler={GsRotationLrScaler} "+
-                $" system.cache_overwrite={CacheOverwrite} trainer.max_steps={MaxTrainSteps} system.loggers.wandb.enable={EnableWandb} ";
+                $"system.gs_lr_scaler={GsLrScaler} system.gs_final_lr_scaler={GsFinalLrScaler} system.color_lr_scaler={GsColorLrScaler} system.opacity_lr_scaler={GsOpacityLrScaler} system.scaling_lr_scaler={GsScalingLrScaler} system.rotation_lr_scaler={GsRotationLrScaler} "+
+                $"system.cache_overwrite={CacheOverwrite} trainer.max_steps={MaxTrainSteps} system.loggers.wandb.enable={EnableWandb} "+
+                $"system.prompt_processor.prompt={PrepareString(ScenePrompt)} ";
         return true;
             
     }
