@@ -1073,9 +1073,10 @@ namespace GaussianSplatting.Runtime
             Quaternion rotation)
         {
             if (!EnsureEditingBuffers()) return;
+            // 这两个缓冲区分别存储编辑之前高斯的位置信息和其他信息（如SH,颜色，缩放等）。在旋转编辑过程中需要使用
             if (m_GpuEditPosMouseDown == null || m_GpuEditOtherMouseDown == null)
                 return; // should have captured initial state
-
+            
             using var cmb = new CommandBuffer { name = "SplatRotateSelection" };
             SetAssetDataOnCS(cmb, KernelIndices.RotateSelection);
 
@@ -1099,13 +1100,15 @@ namespace GaussianSplatting.Runtime
             Vector3 scale)
         {
             if (!EnsureEditingBuffers()) return;
-            if (m_GpuEditPosMouseDown == null) return; // should have captured initial state
+            if (m_GpuEditPosMouseDown == null || m_GpuEditOtherMouseDown == null) return; // should have captured initial state
 
             using var cmb = new CommandBuffer { name = "SplatScaleSelection" };
             SetAssetDataOnCS(cmb, KernelIndices.ScaleSelection);
 
             cmb.SetComputeBufferParam(m_CSSplatUtilities, (int)KernelIndices.ScaleSelection, Props.SplatPosMouseDown,
                 m_GpuEditPosMouseDown);
+            cmb.SetComputeBufferParam(m_CSSplatUtilities, (int)KernelIndices.ScaleSelection, Props.SplatOtherMouseDown,
+                m_GpuEditOtherMouseDown);
             cmb.SetComputeVectorParam(m_CSSplatUtilities, Props.SelectionCenter, localSpaceCenter);
             cmb.SetComputeMatrixParam(m_CSSplatUtilities, Props.MatrixObjectToWorld, localToWorld);
             cmb.SetComputeMatrixParam(m_CSSplatUtilities, Props.MatrixWorldToObject, worldToLocal);

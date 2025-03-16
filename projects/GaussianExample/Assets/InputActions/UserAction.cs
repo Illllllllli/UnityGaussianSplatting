@@ -172,6 +172,15 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""initialStateCheck"": false
                 },
                 {
+                    ""name"": ""Escape"",
+                    ""type"": ""Button"",
+                    ""id"": ""01851522-2fca-49bb-968d-81ba503f4644"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
                     ""name"": ""G key"",
                     ""type"": ""Value"",
                     ""id"": ""2b45573f-6a46-4f27-9c9a-2bea2040cb63"",
@@ -181,9 +190,18 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""initialStateCheck"": true
                 },
                 {
-                    ""name"": ""Escape"",
+                    ""name"": ""R key"",
                     ""type"": ""Button"",
-                    ""id"": ""01851522-2fca-49bb-968d-81ba503f4644"",
+                    ""id"": ""0bc89341-8bed-4fa9-bb3f-dfaa6b480dfa"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""T key"",
+                    ""type"": ""Button"",
+                    ""id"": ""4085ecb8-ee01-4d95-9562-9babd97f5ef1"",
                     ""expectedControlType"": ""Button"",
                     ""processors"": """",
                     ""interactions"": """",
@@ -457,6 +475,28 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                 },
                 {
                     ""name"": """",
+                    ""id"": ""6440ed35-b104-4f35-9a60-d23ad636ae33"",
+                    ""path"": ""<Keyboard>/r"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""R key"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""d315541d-ea43-41c6-9c2d-be55088d59b7"",
+                    ""path"": ""<Keyboard>/T"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""T key"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
                     ""id"": ""bcdf72ba-21df-4ce0-b04e-6e2b71927373"",
                     ""path"": ""Keyboard/Escape"",
                     ""interactions"": """",
@@ -489,8 +529,10 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         m_Player_CtrlA = m_Player.FindAction("Ctrl A", throwIfNotFound: true);
         m_Player_CtrlShiftA = m_Player.FindAction("Ctrl Shift A", throwIfNotFound: true);
         m_Player_Delete = m_Player.FindAction("Delete", throwIfNotFound: true);
-        m_Player_Gkey = m_Player.FindAction("G key", throwIfNotFound: true);
         m_Player_Escape = m_Player.FindAction("Escape", throwIfNotFound: true);
+        m_Player_Gkey = m_Player.FindAction("G key", throwIfNotFound: true);
+        m_Player_Rkey = m_Player.FindAction("R key", throwIfNotFound: true);
+        m_Player_Tkey = m_Player.FindAction("T key", throwIfNotFound: true);
     }
 
     public void Dispose()
@@ -568,8 +610,10 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
     private readonly InputAction m_Player_CtrlA;
     private readonly InputAction m_Player_CtrlShiftA;
     private readonly InputAction m_Player_Delete;
-    private readonly InputAction m_Player_Gkey;
     private readonly InputAction m_Player_Escape;
+    private readonly InputAction m_Player_Gkey;
+    private readonly InputAction m_Player_Rkey;
+    private readonly InputAction m_Player_Tkey;
     public struct PlayerActions
     {
         private @UserAction m_Wrapper;
@@ -590,8 +634,10 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         public InputAction @CtrlA => m_Wrapper.m_Player_CtrlA;
         public InputAction @CtrlShiftA => m_Wrapper.m_Player_CtrlShiftA;
         public InputAction @Delete => m_Wrapper.m_Player_Delete;
-        public InputAction @Gkey => m_Wrapper.m_Player_Gkey;
         public InputAction @Escape => m_Wrapper.m_Player_Escape;
+        public InputAction @Gkey => m_Wrapper.m_Player_Gkey;
+        public InputAction @Rkey => m_Wrapper.m_Player_Rkey;
+        public InputAction @Tkey => m_Wrapper.m_Player_Tkey;
         public InputActionMap Get() { return m_Wrapper.m_Player; }
         public void Enable() { Get().Enable(); }
         public void Disable() { Get().Disable(); }
@@ -649,12 +695,18 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
             @Delete.started += instance.OnDelete;
             @Delete.performed += instance.OnDelete;
             @Delete.canceled += instance.OnDelete;
-            @Gkey.started += instance.OnGkey;
-            @Gkey.performed += instance.OnGkey;
-            @Gkey.canceled += instance.OnGkey;
             @Escape.started += instance.OnEscape;
             @Escape.performed += instance.OnEscape;
             @Escape.canceled += instance.OnEscape;
+            @Gkey.started += instance.OnGkey;
+            @Gkey.performed += instance.OnGkey;
+            @Gkey.canceled += instance.OnGkey;
+            @Rkey.started += instance.OnRkey;
+            @Rkey.performed += instance.OnRkey;
+            @Rkey.canceled += instance.OnRkey;
+            @Tkey.started += instance.OnTkey;
+            @Tkey.performed += instance.OnTkey;
+            @Tkey.canceled += instance.OnTkey;
         }
 
         private void UnregisterCallbacks(IPlayerActions instance)
@@ -707,12 +759,18 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
             @Delete.started -= instance.OnDelete;
             @Delete.performed -= instance.OnDelete;
             @Delete.canceled -= instance.OnDelete;
-            @Gkey.started -= instance.OnGkey;
-            @Gkey.performed -= instance.OnGkey;
-            @Gkey.canceled -= instance.OnGkey;
             @Escape.started -= instance.OnEscape;
             @Escape.performed -= instance.OnEscape;
             @Escape.canceled -= instance.OnEscape;
+            @Gkey.started -= instance.OnGkey;
+            @Gkey.performed -= instance.OnGkey;
+            @Gkey.canceled -= instance.OnGkey;
+            @Rkey.started -= instance.OnRkey;
+            @Rkey.performed -= instance.OnRkey;
+            @Rkey.canceled -= instance.OnRkey;
+            @Tkey.started -= instance.OnTkey;
+            @Tkey.performed -= instance.OnTkey;
+            @Tkey.canceled -= instance.OnTkey;
         }
 
         public void RemoveCallbacks(IPlayerActions instance)
@@ -748,7 +806,9 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         void OnCtrlA(InputAction.CallbackContext context);
         void OnCtrlShiftA(InputAction.CallbackContext context);
         void OnDelete(InputAction.CallbackContext context);
-        void OnGkey(InputAction.CallbackContext context);
         void OnEscape(InputAction.CallbackContext context);
+        void OnGkey(InputAction.CallbackContext context);
+        void OnRkey(InputAction.CallbackContext context);
+        void OnTkey(InputAction.CallbackContext context);
     }
 }

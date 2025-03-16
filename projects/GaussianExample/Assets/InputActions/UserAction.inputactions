@@ -150,6 +150,15 @@
                     "initialStateCheck": false
                 },
                 {
+                    "name": "Escape",
+                    "type": "Button",
+                    "id": "01851522-2fca-49bb-968d-81ba503f4644",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
                     "name": "G key",
                     "type": "Value",
                     "id": "2b45573f-6a46-4f27-9c9a-2bea2040cb63",
@@ -159,9 +168,18 @@
                     "initialStateCheck": true
                 },
                 {
-                    "name": "Escape",
+                    "name": "R key",
                     "type": "Button",
-                    "id": "01851522-2fca-49bb-968d-81ba503f4644",
+                    "id": "0bc89341-8bed-4fa9-bb3f-dfaa6b480dfa",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "T key",
+                    "type": "Button",
+                    "id": "4085ecb8-ee01-4d95-9562-9babd97f5ef1",
                     "expectedControlType": "Button",
                     "processors": "",
                     "interactions": "",
@@ -430,6 +448,28 @@
                     "processors": "",
                     "groups": "",
                     "action": "Mouse Wheel",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "6440ed35-b104-4f35-9a60-d23ad636ae33",
+                    "path": "<Keyboard>/r",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "R key",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "d315541d-ea43-41c6-9c2d-be55088d59b7",
+                    "path": "<Keyboard>/T",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "T key",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },

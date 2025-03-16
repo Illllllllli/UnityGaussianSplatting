@@ -23,8 +23,10 @@ public class Status : MonoBehaviour
     public static float translateSensitivity =>
         isInteractive>=0 ? _translateSensitivity : 0f;
 
-    // 框选编辑位移灵敏度
+    // 框选编辑位移/旋转/缩放灵敏度
     public const float EditTranslateSensitivity = 0.01f;
+    public const float EditRotateSensitivity = 0.1f;
+    public const float EditScaleSensitivity = 0.01f;
 
 
     // 基准/最小/最大FoV
@@ -59,7 +61,7 @@ public class Status : MonoBehaviour
 
     // note: 当前只有平移功能
     // 编辑模式改变时触发回调
-    public static event EventHandler<SelectEditMode> EditModeChanged;
+    public static event EventHandler<SelectEditMode> SelectEditModeChanged;
 
     private static SelectEditMode _selectEditMode = SelectEditMode.None;
 
@@ -71,7 +73,7 @@ public class Status : MonoBehaviour
         {
             if (_selectEditMode == value) return;
             _selectEditMode = value;
-            EditModeChanged?.Invoke(_selectEditMode, value);
+            SelectEditModeChanged?.Invoke(_selectEditMode, value);
         }
     }
 
@@ -137,13 +139,11 @@ public class Status : MonoBehaviour
     public static void SwitchSelectMode()
     {
         playMode = PlayMode.Select;
-        Debug.Log("select");
     }
 
     public static void SwitchViewMode()
     {
         playMode = PlayMode.View;
-        Debug.Log("view");
     }
     
 
@@ -155,6 +155,16 @@ public class Status : MonoBehaviour
     public static void StartSelectTranslateEdit()
     {
         selectEditMode = SelectEditMode.Translate;
+    }
+
+    public static void StartSelectScaleEdit()
+    {
+        selectEditMode = SelectEditMode.Scale;
+    }
+
+    public static void StartSelectRotateEdit()
+    {
+        selectEditMode = SelectEditMode.Rotate;
     }
     
     /// <summary>

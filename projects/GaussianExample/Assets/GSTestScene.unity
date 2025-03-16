@@ -4544,6 +4544,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   gaussianSplats: {fileID: 0}
   mainCamera: {fileID: 1462254337}
+  testButton: {fileID: 288481399}
 --- !u!114 &185463580
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4652,7 +4653,6 @@ MonoBehaviour:
   deleteDensifUntilIterNumber: {fileID: 1143470750}
   deleteDensificationIntervalSlider: {fileID: 121089837}
   deleteDensificationIntervalNumber: {fileID: 1884643484}
-  testButton: {fileID: 288481399}
 --- !u!1 &191860520
 GameObject:
   m_ObjectHideFlags: 0

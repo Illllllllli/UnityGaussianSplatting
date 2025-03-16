@@ -44,7 +44,7 @@ float4x4 _MatrixObjectToWorld;
 float4x4 _MatrixWorldToObject;
 float4x4 _MatrixMV;
 
-float4x4 _MatrixVP;//新增
+float4x4 _MatrixVP; //新增
 float4 _VecScreenParams;
 float4 _VecWorldSpaceCameraPos;
 int _SelectionMode;
@@ -65,7 +65,7 @@ uint FloatToSortableUint(float f)
 // 并行代码
 // 初始化排序键
 [numthreads(GROUP_SIZE,1,1)]
-void CSSetIndices (uint3 id : SV_DispatchThreadID)
+void CSSetIndices(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _SplatCount)
@@ -75,7 +75,7 @@ void CSSetIndices (uint3 id : SV_DispatchThreadID)
 }
 
 [numthreads(GROUP_SIZE,1,1)]
-void CSCalcDistances (uint3 id : SV_DispatchThreadID)
+void CSCalcDistances(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _SplatCount)
@@ -106,6 +106,7 @@ struct GaussianCutoutShaderData // match GaussianCutout.ShaderData in C#
     float4x4 mat;
     uint typeAndFlags;
 };
+
 StructuredBuffer<GaussianCutoutShaderData> _SplatCutouts;
 
 RWByteAddressBuffer _SplatSelectedBits;
@@ -195,7 +196,7 @@ bool IsSplatCut(float3 pos)
 }
 
 [numthreads(GROUP_SIZE,1,1)]
-void CSCalcViewData (uint3 id : SV_DispatchThreadID)
+void CSCalcViewData(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _SplatCount)
@@ -203,8 +204,8 @@ void CSCalcViewData (uint3 id : SV_DispatchThreadID)
 
     SplatData splat = LoadSplatData(idx);
     SplatViewData view = (SplatViewData)0;
-    
-    float3 centerWorldPos = mul(_MatrixObjectToWorld, float4(splat.pos,1)).xyz;
+
+    float3 centerWorldPos = mul(_MatrixObjectToWorld, float4(splat.pos, 1)).xyz;
     float4 centerClipPos = mul(UNITY_MATRIX_VP, float4(centerWorldPos, 1));
     half opacityScale = _SplatOpacityScale;
     float splatScale = _SplatScale;
@@ -242,7 +243,7 @@ void CSCalcViewData (uint3 id : SV_DispatchThreadID)
         cov3d0 *= splatScale2;
         cov3d1 *= splatScale2;
         float3 cov2d = CalcCovariance2D(splat.pos, cov3d0, cov3d1, _MatrixMV, UNITY_MATRIX_P, _VecScreenParams);
-        
+
         DecomposeCovariance(cov2d, view.axis1, view.axis2);
 
         float3 worldViewDir = _VecWorldSpaceCameraPos.xyz - centerWorldPos;
@@ -255,7 +256,7 @@ void CSCalcViewData (uint3 id : SV_DispatchThreadID)
         view.color.x = (f32tof16(col.r) << 16) | f32tof16(col.g);
         view.color.y = (f32tof16(col.b) << 16) | f32tof16(col.a);
     }
-    
+
     _SplatViewData[idx] = view;
 }
 
@@ -272,7 +273,7 @@ uint2 GetSplatIndicesFromWord(uint idx)
 }
 
 [numthreads(GROUP_SIZE,1,1)]
-void CSUpdateEditData (uint3 id : SV_DispatchThreadID)
+void CSUpdateEditData(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _BufferSize)
@@ -323,9 +324,9 @@ void CSUpdateEditData (uint3 id : SV_DispatchThreadID)
 }
 
 [numthreads(1,1,1)]
-void CSInitEditData (uint3 id : SV_DispatchThreadID)
+void CSInitEditData(uint3 id : SV_DispatchThreadID)
 {
-    _DstBuffer.Store3(0, uint3(0,0,0)); // selected, deleted, cut counts
+    _DstBuffer.Store3(0, uint3(0, 0, 0)); // selected, deleted, cut counts
     uint initMin = FloatToSortableUint(1.0e38);
     uint initMax = FloatToSortableUint(-1.0e38);
     _DstBuffer.Store3(12, uint3(initMin, initMin, initMin));
@@ -333,7 +334,7 @@ void CSInitEditData (uint3 id : SV_DispatchThreadID)
 }
 
 [numthreads(GROUP_SIZE,1,1)]
-void CSClearBuffer (uint3 id : SV_DispatchThreadID)
+void CSClearBuffer(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _BufferSize)
@@ -342,7 +343,7 @@ void CSClearBuffer (uint3 id : SV_DispatchThreadID)
 }
 
 [numthreads(GROUP_SIZE,1,1)]
-void CSInvertSelection (uint3 id : SV_DispatchThreadID)
+void CSInvertSelection(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _BufferSize)
@@ -364,7 +365,7 @@ void CSInvertSelection (uint3 id : SV_DispatchThreadID)
 }
 
 [numthreads(GROUP_SIZE,1,1)]
-void CSSelectAll (uint3 id : SV_DispatchThreadID)
+void CSSelectAll(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _BufferSize)
@@ -386,7 +387,7 @@ void CSSelectAll (uint3 id : SV_DispatchThreadID)
 
 
 [numthreads(GROUP_SIZE,1,1)]
-void CSOrBuffers (uint3 id : SV_DispatchThreadID)
+void CSOrBuffers(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _BufferSize)
@@ -399,7 +400,7 @@ void CSOrBuffers (uint3 id : SV_DispatchThreadID)
 float4 _SelectionRect;
 
 [numthreads(GROUP_SIZE,1,1)]
-void CSSelectionUpdate (uint3 id : SV_DispatchThreadID)
+void CSSelectionUpdate(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _SplatCount)
@@ -409,7 +410,7 @@ void CSSelectionUpdate (uint3 id : SV_DispatchThreadID)
     if (IsSplatCut(pos))
         return;
 
-    float3 centerWorldPos = mul(_MatrixObjectToWorld, float4(pos,1)).xyz;
+    float3 centerWorldPos = mul(_MatrixObjectToWorld, float4(pos, 1)).xyz;
     // float4 centerClipPos = mul(UNITY_MATRIX_VP, float4(centerWorldPos, 1));//这里需要改成从外部传入。因为UNITY_MATRIX_VP不一定是运行摄像机的矩阵
     float4 centerClipPos = mul(_MatrixVP, float4(centerWorldPos, 1));
     bool behindCam = centerClipPos.w <= 0;
@@ -441,7 +442,7 @@ bool IsSplatSelected(uint idx)
 }
 
 [numthreads(GROUP_SIZE,1,1)]
-void CSTranslateSelection (uint3 id : SV_DispatchThreadID)
+void CSTranslateSelection(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _SplatCount)
@@ -459,13 +460,55 @@ void CSTranslateSelection (uint3 id : SV_DispatchThreadID)
     }
 }
 
+
+// 将四元数转换为 3x3 旋转矩阵
+float3x3 QuaternionToMatrix(float4 q)
+{
+    // 确保四元数已归一化
+    q = normalize(q);
+
+    float x = q.x;
+    float y = q.y;
+    float z = q.z;
+    float w = q.w;
+
+    float x2 = x + x;
+    float y2 = y + y;
+    float z2 = z + z;
+    float xx = x * x2;
+    float xy = x * y2;
+    float xz = x * z2;
+    float yy = y * y2;
+    float yz = y * z2;
+    float zz = z * z2;
+    float wx = w * x2;
+    float wy = w * y2;
+    float wz = w * z2;
+
+    float3x3 m;
+    m._m00 = 1.0 - (yy + zz);
+    m._m01 = xy - wz;
+    m._m02 = xz + wy;
+
+    m._m10 = xy + wz;
+    m._m11 = 1.0 - (xx + zz);
+    m._m12 = yz - wx;
+
+    m._m20 = xz - wy;
+    m._m21 = yz + wx;
+    m._m22 = 1.0 - (xx + yy);
+
+    return m;
+}
+
 float3 _SelectionCenter;
 float4 _SelectionDeltaRot;
 ByteAddressBuffer _SplatPosMouseDown;
 ByteAddressBuffer _SplatOtherMouseDown;
+void RotateSH(inout SplatSHData sh, float3x3 rot);
 
 [numthreads(GROUP_SIZE,1,1)]
-void CSRotateSelection (uint3 id : SV_DispatchThreadID)
+void CSRotateSelection(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _SplatCount)
@@ -479,9 +522,9 @@ void CSRotateSelection (uint3 id : SV_DispatchThreadID)
         uint posStride = 12;
         float3 pos = asfloat(_SplatPosMouseDown.Load3(idx * posStride));
         pos -= _SelectionCenter;
-        pos = mul(_MatrixObjectToWorld, float4(pos,1)).xyz;
+        pos = mul(_MatrixObjectToWorld, float4(pos, 1)).xyz;
         pos = QuatRotateVector(pos, _SelectionDeltaRot);
-        pos = mul(_MatrixWorldToObject, float4(pos,1)).xyz;
+        pos = mul(_MatrixWorldToObject, float4(pos, 1)).xyz;
         pos += _SelectionCenter;
         _SplatPos.Store3(idx * posStride, asuint(pos));
     }
@@ -494,19 +537,57 @@ void CSRotateSelection (uint3 id : SV_DispatchThreadID)
         uint rotVal = _SplatOtherMouseDown.Load(idx * otherStride);
         float4 rot = DecodeRotation(DecodePacked_10_10_10_2(rotVal));
 
-        //@TODO: correct rotation
-        rot = QuatMul(rot, _SelectionDeltaRot);
-
+        //@TODO: correct rotation (finished)
+        // rot = QuatMul(rot, _SelectionDeltaRot);//wrong
+        // 确保增量旋转 _SelectionDeltaRot 作用于原始旋转之前，符合世界空间旋转轴定义
+        rot= QuatMul(_SelectionDeltaRot,rot);
         rotVal = EncodeQuatToNorm10(PackSmallest3Rotation(rot));
         _SplatOther.Store(idx * otherStride, rotVal);
     }
+    //@TODO: rotate SHs (finished)
+    uint shStride = 192;
+    uint shOffset = idx * shStride;
+    SplatSHData sh;
+    sh.sh1 = asfloat(_SplatOther.Load3(shOffset + 12 * 0));
+    sh.sh2 = asfloat(_SplatOther.Load3(shOffset + 12 * 1));
+    sh.sh3 = asfloat(_SplatOther.Load3(shOffset + 12 * 2));
+    sh.sh4 = asfloat(_SplatOther.Load3(shOffset + 12 * 3));
+    sh.sh5 = asfloat(_SplatOther.Load3(shOffset + 12 * 4));
+    sh.sh6 = asfloat(_SplatOther.Load3(shOffset + 12 * 5));
+    sh.sh7 = asfloat(_SplatOther.Load3(shOffset + 12 * 6));
+    sh.sh8 = asfloat(_SplatOther.Load3(shOffset + 12 * 7));
+    sh.sh9 = asfloat(_SplatOther.Load3(shOffset + 12 * 8));
+    sh.sh10 = asfloat(_SplatOther.Load3(shOffset + 12 * 9));
+    sh.sh11 = asfloat(_SplatOther.Load3(shOffset + 12 * 10));
+    sh.sh12 = asfloat(_SplatOther.Load3(shOffset + 12 * 11));
+    sh.sh13 = asfloat(_SplatOther.Load3(shOffset + 12 * 12));
+    sh.sh14 = asfloat(_SplatOther.Load3(shOffset + 12 * 13));
+    sh.sh15 = asfloat(_SplatOther.Load3(shOffset + 12 * 14));
 
-    //@TODO: rotate SHs
+    // 生成旋转矩阵并应用旋转
+    float3x3 rotMatrix = QuaternionToMatrix(_SelectionDeltaRot);
+    RotateSH(sh, rotMatrix);
+
+    _SplatOther.Store3(shOffset + 12 * 0, asuint(sh.sh1));
+    _SplatOther.Store3(shOffset + 12 * 1, asuint(sh.sh2));
+    _SplatOther.Store3(shOffset + 12 * 2, asuint(sh.sh3));
+    _SplatOther.Store3(shOffset + 12 * 3, asuint(sh.sh4));
+    _SplatOther.Store3(shOffset + 12 * 4, asuint(sh.sh5));
+    _SplatOther.Store3(shOffset + 12 * 5, asuint(sh.sh6));
+    _SplatOther.Store3(shOffset + 12 * 6, asuint(sh.sh7));
+    _SplatOther.Store3(shOffset + 12 * 7, asuint(sh.sh8));
+    _SplatOther.Store3(shOffset + 12 * 8, asuint(sh.sh9));
+    _SplatOther.Store3(shOffset + 12 * 9, asuint(sh.sh10));
+    _SplatOther.Store3(shOffset + 12 * 10, asuint(sh.sh11));
+    _SplatOther.Store3(shOffset + 12 * 11, asuint(sh.sh12));
+    _SplatOther.Store3(shOffset + 12 * 12, asuint(sh.sh13));
+    _SplatOther.Store3(shOffset + 12 * 13, asuint(sh.sh14));
+    _SplatOther.Store3(shOffset + 12 * 14, asuint(sh.sh15));
 }
 
 //@TODO: maybe scale the splat scale itself too?
 [numthreads(GROUP_SIZE,1,1)]
-void CSScaleSelection (uint3 id : SV_DispatchThreadID)
+void CSScaleSelection(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _SplatCount)
@@ -517,14 +598,22 @@ void CSScaleSelection (uint3 id : SV_DispatchThreadID)
     uint fmt = _SplatFormat & 0xFF;
     if (_SplatChunkCount == 0 && fmt == VECTOR_FMT_32F)
     {
+        // 处理位置缩放
         uint stride = 12;
         float3 pos = asfloat(_SplatPosMouseDown.Load3(idx * stride));
         pos -= _SelectionCenter;
-        pos = mul(_MatrixObjectToWorld, float4(pos,1)).xyz;
+        pos = mul(_MatrixObjectToWorld, float4(pos, 1)).xyz;
         pos *= _SelectionDelta;
-        pos = mul(_MatrixWorldToObject, float4(pos,1)).xyz;
+        pos = mul(_MatrixWorldToObject, float4(pos, 1)).xyz;
         pos += _SelectionCenter;
         _SplatPos.Store3(idx * stride, asuint(pos));
+
+        // 处理GS本体缩放
+        uint otherStride = 4 + 12; // 假设 _SplatOther 格式：4字节旋转 + 12字节 scale（3x float）
+        uint scaleOffset = idx * otherStride + 4; // 跳过前4字节（旋转）
+        float3 scale = asfloat(_SplatOtherMouseDown.Load3(scaleOffset));
+        scale *= _SelectionDelta; // 应用缩放因子
+        _SplatOther.Store3(scaleOffset, asuint(scale));
     }
 }
 
@@ -533,19 +622,30 @@ struct ExportSplatData
     float3 pos;
     float3 nor;
     float3 dc0;
-    float4 shR14; float4 shR58; float4 shR9C; float3 shRDF;
-    float4 shG14; float4 shG58; float4 shG9C; float3 shGDF;
-    float4 shB14; float4 shB58; float4 shB9C; float3 shBDF;
+    float4 shR14;
+    float4 shR58;
+    float4 shR9C;
+    float3 shRDF;
+    float4 shG14;
+    float4 shG58;
+    float4 shG9C;
+    float3 shGDF;
+    float4 shB14;
+    float4 shB58;
+    float4 shB9C;
+    float3 shBDF;
     float opacity;
     float3 scale;
     float4 rot;
 };
+
 RWStructuredBuffer<ExportSplatData> _ExportBuffer;
 
 float3 ColorToSH0(float3 col)
 {
     return (col - 0.5) / 0.2820948;
 }
+
 float InvSigmoid(float v)
 {
     return log(v / max(1 - v, 1.0e-6));
@@ -622,7 +722,7 @@ float3 _ExportTransformScale;
 uint _ExportTransformFlags;
 
 [numthreads(GROUP_SIZE,1,1)]
-void CSExportData (uint3 id : SV_DispatchThreadID)
+void CSExportData(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _SplatCount)
@@ -634,7 +734,7 @@ void CSExportData (uint3 id : SV_DispatchThreadID)
     // transform splat by matrix, if needed
     if (_ExportTransformFlags != 0)
     {
-        src.pos = mul(_MatrixObjectToWorld, float4(src.pos,1)).xyz;
+        src.pos = mul(_MatrixObjectToWorld, float4(src.pos, 1)).xyz;
 
         // note: this only handles axis flips from scale, not any arbitrary scaling
         if (_ExportTransformScale.x < 0)
@@ -654,29 +754,29 @@ void CSExportData (uint3 id : SV_DispatchThreadID)
     dst.pos = src.pos;
     dst.nor = 0;
     dst.dc0 = ColorToSH0(src.sh.col);
-    
+
     dst.shR14 = float4(src.sh.sh1.r, src.sh.sh2.r, src.sh.sh3.r, src.sh.sh4.r);
     dst.shR58 = float4(src.sh.sh5.r, src.sh.sh6.r, src.sh.sh7.r, src.sh.sh8.r);
     dst.shR9C = float4(src.sh.sh9.r, src.sh.sh10.r, src.sh.sh11.r, src.sh.sh12.r);
     dst.shRDF = float3(src.sh.sh13.r, src.sh.sh14.r, src.sh.sh15.r);
-    
+
     dst.shG14 = float4(src.sh.sh1.g, src.sh.sh2.g, src.sh.sh3.g, src.sh.sh4.g);
     dst.shG58 = float4(src.sh.sh5.g, src.sh.sh6.g, src.sh.sh7.g, src.sh.sh8.g);
     dst.shG9C = float4(src.sh.sh9.g, src.sh.sh10.g, src.sh.sh11.g, src.sh.sh12.g);
     dst.shGDF = float3(src.sh.sh13.g, src.sh.sh14.g, src.sh.sh15.g);
-    
+
     dst.shB14 = float4(src.sh.sh1.b, src.sh.sh2.b, src.sh.sh3.b, src.sh.sh4.b);
     dst.shB58 = float4(src.sh.sh5.b, src.sh.sh6.b, src.sh.sh7.b, src.sh.sh8.b);
     dst.shB9C = float4(src.sh.sh9.b, src.sh.sh10.b, src.sh.sh11.b, src.sh.sh12.b);
     dst.shBDF = float3(src.sh.sh13.b, src.sh.sh14.b, src.sh.sh15.b);
-    
+
     dst.opacity = InvSigmoid(src.opacity);
     dst.scale = log(src.scale);
     dst.rot = src.rot.wxyz;
 
     if (isCut)
         dst.nor = 1; // mark as skipped for export
-    
+
     _ExportBuffer[idx] = dst;
 }
 
@@ -692,7 +792,7 @@ float4 _CopyTransformRotation;
 float3 _CopyTransformScale;
 
 [numthreads(GROUP_SIZE,1,1)]
-void CSCopySplats (uint3 id : SV_DispatchThreadID)
+void CSCopySplats(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _CopyCount)
@@ -705,7 +805,7 @@ void CSCopySplats (uint3 id : SV_DispatchThreadID)
     SplatData src = LoadSplatData(idx);
 
     // transform the splat
-    src.pos = mul(_CopyTransformMatrix, float4(src.pos,1)).xyz;
+    src.pos = mul(_CopyTransformMatrix, float4(src.pos, 1)).xyz;
     // note: this only handles axis flips from scale, not any arbitrary scaling
     if (_CopyTransformScale.x < 0)
         src.rot.yz = -src.rot.yz;
@@ -727,10 +827,10 @@ void CSCopySplats (uint3 id : SV_DispatchThreadID)
     uint otherStride = 4 + 12;
     uint rotVal = EncodeQuatToNorm10(PackSmallest3Rotation(src.rot));
     _CopyDstOther.Store4(dstIdx * otherStride, uint4(
-        rotVal,
-        asuint(src.scale.x),
-        asuint(src.scale.y),
-        asuint(src.scale.z)));
+                             rotVal,
+                             asuint(src.scale.x),
+                             asuint(src.scale.y),
+                             asuint(src.scale.z)));
     // color
     uint3 pixelIndex = SplatIndexToPixelIndex(dstIdx);
     _CopyDstColor[pixelIndex.xy] = float4(src.sh.col, src.opacity);

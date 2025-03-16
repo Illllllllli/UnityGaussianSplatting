@@ -177,6 +177,7 @@ namespace GSTestScene
         {
             if (gaussianSplatAsset.enableEdit)
             {
+                if (editPanel.activeSelf) return;
                 editPanel.SetActive(true);
                 Status.UpdateIsInteractive(false);
             }
