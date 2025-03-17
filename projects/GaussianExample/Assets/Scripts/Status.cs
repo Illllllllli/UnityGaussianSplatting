@@ -93,6 +93,9 @@ public class Status : MonoBehaviour
     // 存储编辑时需要用到的点云文件路径
     public const string AssetPlyFileLocalDir = "ply";
     public const string AssetPlyFileName = "point_clouds.ply";
+    // 存储模拟时需要用到的网格文件路径
+    public const string AssetMeshFileLocalDir = "mesh";
+    public const string AssetMeshFileName = "mesh.txt";
 
     public const string ChunkFileSuffix = "_chk.bytes";
     public const string PositionFileSuffix = "_pos.bytes";
@@ -144,6 +147,11 @@ public class Status : MonoBehaviour
     public static void SwitchViewMode()
     {
         playMode = PlayMode.View;
+    }
+
+    public static void SwitchSilumateMode()
+    {
+        playMode = PlayMode.Simulate;
     }
     
 
@@ -224,6 +232,7 @@ public enum PlayMode
     None,
     View,
     Select,
+    Simulate
 }
 
 public enum SelectEditMode

@@ -1,11 +1,9 @@
 using System;
 using GaussianSplatting.Editor;
 using GaussianSplatting.Runtime;
-using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.UI;
 
 //监听鼠标事件
 namespace GSTestScene
@@ -34,7 +32,7 @@ namespace GSTestScene
         private Vector3 _selectedCenterRotate = Vector3.positiveInfinity;
         private Vector3 _cameraForwardRotate = Vector3.positiveInfinity;
 
-        private float _mouseRotateAccumulation = 0f;
+        private float _mouseRotateAccumulation;
 
         // 缩放编辑中，记录鼠标开始移动时的缩放体中心坐标和累计缩放量
         private Vector3 _selectedCenterScale = Vector3.positiveInfinity;
@@ -46,7 +44,7 @@ namespace GSTestScene
         private void BindSelectAreaInput()
         {
             // 鼠标左键按下
-            _userAction.Player.MouseLeftClick.performed += ctx =>
+            _userAction.Player.MouseLeftClick.performed += _ =>
             {
                 _isMousePressed = true;
                 //当前为选择模式且鼠标不在UI上且不是在编辑状态下
@@ -68,7 +66,7 @@ namespace GSTestScene
                 }
             };
             // 鼠标左键抬起
-            _userAction.Player.MouseLeftClick.canceled += ctx =>
+            _userAction.Player.MouseLeftClick.canceled += _ =>
             {
                 _isMousePressed = false;
                 if (Status.playMode == PlayMode.Select)
@@ -77,7 +75,7 @@ namespace GSTestScene
                 }
             };
             // 监听鼠标移动
-            _userAction.Player.MouseMovement.performed += ctx =>
+            _userAction.Player.MouseMovement.performed += _ =>
             {
                 if (!_isMousePressed) return;
                 if (Status.isInteractive < 0) return;
@@ -111,13 +109,25 @@ namespace GSTestScene
         }
 
         /// <summary>
-        /// 绑定模式切换输入
+        /// 绑定左侧边栏按钮输入快捷键与右侧菜单显示/隐藏快捷键
         /// </summary>
-        private void BindModeChangeInput()
+        private void BindButtonInput()
         {
             //切换模式
-            _userAction.Player.SwitchViewMode.performed += ctx => { Status.SwitchViewMode(); };
-            _userAction.Player.SwitchSelectMode.performed += ctx => { Status.SwitchSelectMode(); };
+            _userAction.Player.SwitchViewMode.performed += _ =>  Status.SwitchViewMode();
+            _userAction.Player.SwitchSelectMode.performed += _ =>  Status.SwitchSelectMode(); 
+            //显示编辑，面板
+            _userAction.Player.ShowEditPanel.performed += _ => GetComponent<EditManager>().HandleEditClick();
+            //显示返回开始页面面板
+            _userAction.Player.Escape.performed += _ => GetComponent<MainUIManager>().SetBackCheckPanelActive(true);
+            //导出点云
+            _userAction.Player.ExportPLY.performed += _ => GetComponent<MainUIManager>().ExportPlyFile();
+            //显示日志面板
+            _userAction.Player.ShowLogInfo.performed += _ => GetComponent<EditManager>().HandleLogInfoClick();
+            //开启/关闭模拟
+            _userAction.Player.StartSimulate.performed += _ => GetComponent<MainUIManager>().HandleSimulateClick();
+            //显示/隐藏右侧属性菜单
+            _userAction.Player.Tabkey.performed += _ => GetComponent<MainUIManager>().ToggleSettingPanelActive();
         }
 
         /// <summary>
@@ -126,18 +136,18 @@ namespace GSTestScene
         private void BindCameraTransformInput()
         {
             //移动视角(x,y,z分别为左右，上下，前后)
-            _userAction.Player.Akey.performed += ctx => _cameraMovement.x--;
-            _userAction.Player.Akey.canceled += ctx => _cameraMovement.x++;
-            _userAction.Player.Dkey.performed += ctx => _cameraMovement.x++;
-            _userAction.Player.Dkey.canceled += ctx => _cameraMovement.x--;
-            _userAction.Player.Wkey.performed += ctx => _cameraMovement.z++;
-            _userAction.Player.Wkey.canceled += ctx => _cameraMovement.z--;
-            _userAction.Player.Skey.performed += ctx => _cameraMovement.z--;
-            _userAction.Player.Skey.canceled += ctx => _cameraMovement.z++;
-            _userAction.Player.Ekey.performed += ctx => _cameraMovement.y++;
-            _userAction.Player.Ekey.canceled += ctx => _cameraMovement.y--;
-            _userAction.Player.Qkey.performed += ctx => _cameraMovement.y--;
-            _userAction.Player.Qkey.canceled += ctx => _cameraMovement.y++;
+            _userAction.Player.Akey.performed += _ => _cameraMovement.x--;
+            _userAction.Player.Akey.canceled += _ => _cameraMovement.x++;
+            _userAction.Player.Dkey.performed += _ => _cameraMovement.x++;
+            _userAction.Player.Dkey.canceled += _ => _cameraMovement.x--;
+            _userAction.Player.Wkey.performed += _ => _cameraMovement.z++;
+            _userAction.Player.Wkey.canceled += _ => _cameraMovement.z--;
+            _userAction.Player.Skey.performed += _ => _cameraMovement.z--;
+            _userAction.Player.Skey.canceled += _ => _cameraMovement.z++;
+            _userAction.Player.Ekey.performed += _ => _cameraMovement.y++;
+            _userAction.Player.Ekey.canceled += _ => _cameraMovement.y--;
+            _userAction.Player.Qkey.performed += _ => _cameraMovement.y--;
+            _userAction.Player.Qkey.canceled += _ => _cameraMovement.y++;
 
             // 鼠标滚轮滑动更改相机FoV
             _userAction.Player.MouseWheel.performed += ctx =>
@@ -158,7 +168,6 @@ namespace GSTestScene
                 if (Status.isInteractive < 0) return;
                 if (GsTools.IsPointerOverUIObject()) return;
                 if (Status.playMode == PlayMode.Select) return;
-
                 {
                     Vector2 mouseDelta = ctx.ReadValue<Vector2>();
 
@@ -177,28 +186,28 @@ namespace GSTestScene
         /// </summary>
         private void BindSelectFuncInput()
         {
-            _userAction.Player.CtrlI.performed += ctx =>
+            _userAction.Player.CtrlI.performed += _ =>
             {
                 if (Status.playMode == PlayMode.Select)
                 {
                     gsRenderer.EditInvertSelection();
                 }
             };
-            _userAction.Player.CtrlA.performed += ctx =>
+            _userAction.Player.CtrlA.performed += _ =>
             {
                 if (Status.playMode == PlayMode.Select)
                 {
                     gsRenderer.EditSelectAll();
                 }
             };
-            _userAction.Player.CtrlShiftA.performed += ctx =>
+            _userAction.Player.CtrlShiftA.performed += _ =>
             {
                 if (Status.playMode == PlayMode.Select)
                 {
                     gsRenderer.EditDeselectAll();
                 }
             };
-            _userAction.Player.Delete.performed += ctx =>
+            _userAction.Player.Delete.performed += _ =>
             {
                 if (Status.playMode == PlayMode.Select)
                 {
@@ -257,7 +266,7 @@ namespace GSTestScene
                         throw new ArgumentOutOfRangeException();
                 }
             };
-            _userAction.Player.MouseLeftClick.performed += ctx =>
+            _userAction.Player.MouseLeftClick.performed += _ =>
             {
                 // 在编辑过程中，点击鼠标左键以结束位移编辑
                 if (Status.selectEditMode != SelectEditMode.None)
@@ -272,7 +281,7 @@ namespace GSTestScene
                 }
             };
             // 对选定区域开始位移操作
-            _userAction.Player.Gkey.performed += ctx =>
+            _userAction.Player.Gkey.performed += _ =>
             {
                 // 判断
                 if (Status.playMode != PlayMode.Select) return;
@@ -280,7 +289,7 @@ namespace GSTestScene
                 // 切换到位移模式
                 Status.StartSelectTranslateEdit();
             };
-            _userAction.Player.Rkey.performed += ctx =>
+            _userAction.Player.Rkey.performed += _ =>
             {
                 // 判断
                 if (Status.playMode != PlayMode.Select) return;
@@ -291,7 +300,7 @@ namespace GSTestScene
                 // 切换到旋转模式
                 Status.StartSelectRotateEdit();
             };
-            _userAction.Player.Tkey.performed += ctx =>
+            _userAction.Player.Tkey.performed += _ =>
             {
                 // 判断
                 if (Status.playMode != PlayMode.Select) return;
@@ -302,15 +311,7 @@ namespace GSTestScene
                 Status.StartSelectScaleEdit();
             };
         }
-
-        /// <summary>
-        /// 绑定其他输入（如打开编辑面板/弹出回到主菜单页面等）
-        /// </summary>
-        private void BindOtherInput()
-        {
-            _userAction.Player.ShowEditPanel.performed += ctx => GetComponent<EditManager>().HandleEditClick();
-            _userAction.Player.Escape.performed += ctx => GetComponent<MainUIManager>().SetBackCheckPanelActive(true);
-        }
+        
 
 
         private void Start()
@@ -320,11 +321,10 @@ namespace GSTestScene
             _userAction = new UserAction();
             _userAction.Enable();
             BindSelectAreaInput();
-            BindModeChangeInput();
+            BindButtonInput();
             BindCameraTransformInput();
             BindSelectFuncInput();
             BindSelectModeInput();
-            BindOtherInput();
         }
 
 

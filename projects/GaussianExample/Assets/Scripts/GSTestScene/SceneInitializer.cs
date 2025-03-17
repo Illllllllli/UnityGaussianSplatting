@@ -25,7 +25,6 @@ namespace GSTestScene
                 GetComponent<UserActionListener>().gaussianSplats = gaussianSplats;
                 GetComponent<EditManager>().gaussianSplats = gaussianSplats;
             }
-            Status.SwitchViewMode();
         }
     }
 }

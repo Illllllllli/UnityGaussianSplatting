@@ -82,6 +82,33 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""initialStateCheck"": false
                 },
                 {
+                    ""name"": ""Export PLY"",
+                    ""type"": ""Button"",
+                    ""id"": ""4cce65c4-ef6f-42c7-86f5-5d002fbb68a4"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""Show Log Info"",
+                    ""type"": ""Button"",
+                    ""id"": ""d039e0e7-0da4-4725-939f-8c91c3efd724"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""Start Simulate"",
+                    ""type"": ""Button"",
+                    ""id"": ""20cabcb9-e7b9-4451-9fa9-9688d41462c6"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
                     ""name"": ""W key"",
                     ""type"": ""Value"",
                     ""id"": ""3d36303a-d956-4ea2-9c04-37b4b048e493"",
@@ -202,6 +229,15 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""name"": ""T key"",
                     ""type"": ""Button"",
                     ""id"": ""4085ecb8-ee01-4d95-9562-9babd97f5ef1"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""Tab key"",
+                    ""type"": ""Button"",
+                    ""id"": ""afe22378-d387-4ab9-a29c-06e9f8e454f4"",
                     ""expectedControlType"": ""Button"",
                     ""processors"": """",
                     ""interactions"": """",
@@ -505,6 +541,50 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""action"": ""Escape"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""4df697fd-8f73-41fb-9506-09be8f706d67"",
+                    ""path"": ""<Keyboard>/4"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Export PLY"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""cb789317-82a4-4677-8d29-6c98081f7536"",
+                    ""path"": ""<Keyboard>/5"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Show Log Info"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""5389a52c-018e-4046-85a3-76882687e9a9"",
+                    ""path"": ""<Keyboard>/tab"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Tab key"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""1d5f2fec-44e7-458f-8706-b3f837e6a666"",
+                    ""path"": ""<Keyboard>/6"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Start Simulate"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
                 }
             ]
         }
@@ -519,6 +599,9 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         m_Player_SwitchViewMode = m_Player.FindAction("Switch View Mode", throwIfNotFound: true);
         m_Player_SwitchSelectMode = m_Player.FindAction("Switch Select Mode", throwIfNotFound: true);
         m_Player_ShowEditPanel = m_Player.FindAction("Show Edit Panel", throwIfNotFound: true);
+        m_Player_ExportPLY = m_Player.FindAction("Export PLY", throwIfNotFound: true);
+        m_Player_ShowLogInfo = m_Player.FindAction("Show Log Info", throwIfNotFound: true);
+        m_Player_StartSimulate = m_Player.FindAction("Start Simulate", throwIfNotFound: true);
         m_Player_Wkey = m_Player.FindAction("W key", throwIfNotFound: true);
         m_Player_Akey = m_Player.FindAction("A key", throwIfNotFound: true);
         m_Player_Skey = m_Player.FindAction("S key", throwIfNotFound: true);
@@ -533,6 +616,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         m_Player_Gkey = m_Player.FindAction("G key", throwIfNotFound: true);
         m_Player_Rkey = m_Player.FindAction("R key", throwIfNotFound: true);
         m_Player_Tkey = m_Player.FindAction("T key", throwIfNotFound: true);
+        m_Player_Tabkey = m_Player.FindAction("Tab key", throwIfNotFound: true);
     }
 
     public void Dispose()
@@ -600,6 +684,9 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
     private readonly InputAction m_Player_SwitchViewMode;
     private readonly InputAction m_Player_SwitchSelectMode;
     private readonly InputAction m_Player_ShowEditPanel;
+    private readonly InputAction m_Player_ExportPLY;
+    private readonly InputAction m_Player_ShowLogInfo;
+    private readonly InputAction m_Player_StartSimulate;
     private readonly InputAction m_Player_Wkey;
     private readonly InputAction m_Player_Akey;
     private readonly InputAction m_Player_Skey;
@@ -614,6 +701,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
     private readonly InputAction m_Player_Gkey;
     private readonly InputAction m_Player_Rkey;
     private readonly InputAction m_Player_Tkey;
+    private readonly InputAction m_Player_Tabkey;
     public struct PlayerActions
     {
         private @UserAction m_Wrapper;
@@ -624,6 +712,9 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         public InputAction @SwitchViewMode => m_Wrapper.m_Player_SwitchViewMode;
         public InputAction @SwitchSelectMode => m_Wrapper.m_Player_SwitchSelectMode;
         public InputAction @ShowEditPanel => m_Wrapper.m_Player_ShowEditPanel;
+        public InputAction @ExportPLY => m_Wrapper.m_Player_ExportPLY;
+        public InputAction @ShowLogInfo => m_Wrapper.m_Player_ShowLogInfo;
+        public InputAction @StartSimulate => m_Wrapper.m_Player_StartSimulate;
         public InputAction @Wkey => m_Wrapper.m_Player_Wkey;
         public InputAction @Akey => m_Wrapper.m_Player_Akey;
         public InputAction @Skey => m_Wrapper.m_Player_Skey;
@@ -638,6 +729,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         public InputAction @Gkey => m_Wrapper.m_Player_Gkey;
         public InputAction @Rkey => m_Wrapper.m_Player_Rkey;
         public InputAction @Tkey => m_Wrapper.m_Player_Tkey;
+        public InputAction @Tabkey => m_Wrapper.m_Player_Tabkey;
         public InputActionMap Get() { return m_Wrapper.m_Player; }
         public void Enable() { Get().Enable(); }
         public void Disable() { Get().Disable(); }
@@ -665,6 +757,15 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
             @ShowEditPanel.started += instance.OnShowEditPanel;
             @ShowEditPanel.performed += instance.OnShowEditPanel;
             @ShowEditPanel.canceled += instance.OnShowEditPanel;
+            @ExportPLY.started += instance.OnExportPLY;
+            @ExportPLY.performed += instance.OnExportPLY;
+            @ExportPLY.canceled += instance.OnExportPLY;
+            @ShowLogInfo.started += instance.OnShowLogInfo;
+            @ShowLogInfo.performed += instance.OnShowLogInfo;
+            @ShowLogInfo.canceled += instance.OnShowLogInfo;
+            @StartSimulate.started += instance.OnStartSimulate;
+            @StartSimulate.performed += instance.OnStartSimulate;
+            @StartSimulate.canceled += instance.OnStartSimulate;
             @Wkey.started += instance.OnWkey;
             @Wkey.performed += instance.OnWkey;
             @Wkey.canceled += instance.OnWkey;
@@ -707,6 +808,9 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
             @Tkey.started += instance.OnTkey;
             @Tkey.performed += instance.OnTkey;
             @Tkey.canceled += instance.OnTkey;
+            @Tabkey.started += instance.OnTabkey;
+            @Tabkey.performed += instance.OnTabkey;
+            @Tabkey.canceled += instance.OnTabkey;
         }
 
         private void UnregisterCallbacks(IPlayerActions instance)
@@ -729,6 +833,15 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
             @ShowEditPanel.started -= instance.OnShowEditPanel;
             @ShowEditPanel.performed -= instance.OnShowEditPanel;
             @ShowEditPanel.canceled -= instance.OnShowEditPanel;
+            @ExportPLY.started -= instance.OnExportPLY;
+            @ExportPLY.performed -= instance.OnExportPLY;
+            @ExportPLY.canceled -= instance.OnExportPLY;
+            @ShowLogInfo.started -= instance.OnShowLogInfo;
+            @ShowLogInfo.performed -= instance.OnShowLogInfo;
+            @ShowLogInfo.canceled -= instance.OnShowLogInfo;
+            @StartSimulate.started -= instance.OnStartSimulate;
+            @StartSimulate.performed -= instance.OnStartSimulate;
+            @StartSimulate.canceled -= instance.OnStartSimulate;
             @Wkey.started -= instance.OnWkey;
             @Wkey.performed -= instance.OnWkey;
             @Wkey.canceled -= instance.OnWkey;
@@ -771,6 +884,9 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
             @Tkey.started -= instance.OnTkey;
             @Tkey.performed -= instance.OnTkey;
             @Tkey.canceled -= instance.OnTkey;
+            @Tabkey.started -= instance.OnTabkey;
+            @Tabkey.performed -= instance.OnTabkey;
+            @Tabkey.canceled -= instance.OnTabkey;
         }
 
         public void RemoveCallbacks(IPlayerActions instance)
@@ -796,6 +912,9 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         void OnSwitchViewMode(InputAction.CallbackContext context);
         void OnSwitchSelectMode(InputAction.CallbackContext context);
         void OnShowEditPanel(InputAction.CallbackContext context);
+        void OnExportPLY(InputAction.CallbackContext context);
+        void OnShowLogInfo(InputAction.CallbackContext context);
+        void OnStartSimulate(InputAction.CallbackContext context);
         void OnWkey(InputAction.CallbackContext context);
         void OnAkey(InputAction.CallbackContext context);
         void OnSkey(InputAction.CallbackContext context);
@@ -810,5 +929,6 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         void OnGkey(InputAction.CallbackContext context);
         void OnRkey(InputAction.CallbackContext context);
         void OnTkey(InputAction.CallbackContext context);
+        void OnTabkey(InputAction.CallbackContext context);
     }
 }

@@ -284,6 +284,7 @@ namespace GaussianSplatting.Runtime
             m_CommandBuffer.ReleaseTemporaryRT(GaussianSplatRenderer.Props.GaussianSplatRT);
         }
     }
+    
 
     // [ExecuteInEditMode]
     [ExecuteAlways]
@@ -303,10 +304,11 @@ namespace GaussianSplatting.Runtime
         [Tooltip(
             "Rendering order compared to other splats. Within same order splats are sorted by distance. Higher order splats render 'on top of' lower order splats.")]
         public int m_RenderOrder;
-
+        // todo:把这些参数可视化一下。另外，加入快捷键
+        // 更改高斯全局单体大小
         [Range(0.1f, 2.0f)] [Tooltip("Additional scaling factor for the splats")]
         public float m_SplatScale = 1.0f;
-
+        // 更改高斯全局不透明度
         [Range(0.05f, 20.0f)] [Tooltip("Additional scaling factor for opacity")]
         public float m_OpacityScale = 1.0f;
 
@@ -316,9 +318,11 @@ namespace GaussianSplatting.Runtime
         [Tooltip("Show only Spherical Harmonics contribution, using gray color")]
         public bool m_SHOnly;
 
+        // 间隔n帧对高斯进行排序。可能影响性能
         [Range(1, 30)] [Tooltip("Sort splats only every N frames")]
         public int m_SortNthFrame = 1;
-
+        
+        // 渲染模式
         public RenderMode m_RenderMode = RenderMode.Splats;
         [Range(1.0f, 15.0f)] public float m_PointDisplaySize = 3.0f;
 

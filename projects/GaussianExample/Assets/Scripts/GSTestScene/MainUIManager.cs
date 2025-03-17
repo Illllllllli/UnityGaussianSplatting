@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using GaussianSplatting.Editor;
 using GaussianSplatting.Runtime;
 using StartScene;
@@ -17,19 +18,28 @@ namespace GSTestScene
         // 主面板
         private static GameObject _mainCanvas;
         public GameObject mainCanvas;
-        
+
         // 提示面板
         public GameObject tipsPanelPrefab;
 
         public static GameObject TipsPanelPrefab;
+
         // 提示面板实例
         public static GameObject TipsPanel;
-        
+
         // 返回到主菜单相关UI
         public GameObject backCheckPanel;
         public Button doBackButton;
         public Button cancelBackButton;
-        
+
+        // 右侧属性设置面板
+        public GameObject settingPanel;
+        public Slider translateSlider;
+        public Slider rotateSlider;
+        public Slider splatScaleSlider;
+        public Slider splatOpacitySlider;
+        public TMP_Dropdown renderModeDropdown;
+
         private GaussianSplatRenderer gsRenderer => gaussianSplats?.GetComponent<GaussianSplatRenderer>();
 
 
@@ -39,13 +49,15 @@ namespace GSTestScene
         public Button editButton;
         public Button exportButton;
         public Button editInfoButton;
-
+        public Button simulateButton;
+        // 模拟按钮的文本切换
+        public TextMeshProUGUI simulateText;
         // 标识GS数量
         public TextMeshProUGUI splatCountText;
 
         private static readonly Color DisableColor = Color.white;
         private static readonly Color EnableColor = new Color(0.5f, 0.72f, 0.79f);
-        
+
         private void Awake()
         {
             if (tipsPanelPrefab)
@@ -58,51 +70,77 @@ namespace GSTestScene
                 _mainCanvas = mainCanvas;
             }
         }
-        
-        private void Start()
+
+
+        private void InitializeLeftArea()
         {
             //配置按钮功能
             viewButton.onClick.AddListener(Status.SwitchViewMode);
             selectButton.onClick.AddListener(Status.SwitchSelectMode);
             editButton.onClick.AddListener(GetComponent<EditManager>().HandleEditClick);
             exportButton.onClick.AddListener(ExportPlyFile);
-            editInfoButton.onClick.AddListener(()=>
-            {
-                GameObject editInfoPanel = GetComponent<EditManager>().commandInfoPanel;
-                editInfoPanel.SetActive(!editInfoPanel.activeSelf);
-            });
-            
+            editInfoButton.onClick.AddListener(GetComponent<EditManager>().HandleLogInfoClick);
+            simulateButton.onClick.AddListener(HandleSimulateClick);
+            // 切换模式时按钮样式调整
+            Status.PlayModeChanged += OnPlayModeUpdate;
+        }
+
+        private void InitializeBackPanel()
+        {
             cancelBackButton.onClick.AddListener(() => SetBackCheckPanelActive(false));
             doBackButton.onClick.AddListener(BackToStartScene);
-            //配置滚动条属性
-            Slider[] sliders = mainCanvas.GetComponentsInChildren<Slider>();
-            foreach (var slider in sliders)
-            {
-                switch (slider.gameObject.name)
-                {
-                    case "RotationSlider":
-                        Status.UpdateRotateSensitivity(slider.value);
-                        slider.onValueChanged.AddListener(Status.UpdateRotateSensitivity);
-                        break;
-                    case "TranslateSlider":
-                        Status.UpdateTranslateSensitivity(slider.value);
-                        slider.onValueChanged.AddListener(Status.UpdateTranslateSensitivity);
-                        break;
-                }
-            }
+        }
 
+        private void InitializeSettingPanel()
+        {
+            // 配置滚动条属性
+            Status.UpdateRotateSensitivity(rotateSlider.value);
+            Status.UpdateTranslateSensitivity(translateSlider.value);
+            rotateSlider.onValueChanged.AddListener(Status.UpdateRotateSensitivity);
+            translateSlider.onValueChanged.AddListener(Status.UpdateTranslateSensitivity);
+            splatScaleSlider.onValueChanged.AddListener(value =>
+            {
+                if (gaussianSplats) gsRenderer.m_SplatScale = value;
+            });
+            splatOpacitySlider.onValueChanged.AddListener(value =>
+            {
+                if (gaussianSplats) gsRenderer.m_OpacityScale = value;
+            });
+            // 配置渲染类型下拉菜单属性
+            renderModeDropdown.options.Clear();
+            renderModeDropdown.options.AddRange(Enum.GetNames(typeof(GaussianSplatRenderer.RenderMode))
+                .Select(enumName => new TMP_Dropdown.OptionData(enumName))
+                .ToList());
+            renderModeDropdown.onValueChanged.AddListener(value =>
+            {
+                if (gaussianSplats) gsRenderer.m_RenderMode = (GaussianSplatRenderer.RenderMode)value;
+            });
             // 配置场景信息实时更新
             GaussianSplatRenderer.onSplatCountChanged += UpdateSplatInfo;
             GaussianSplatRenderer.onEditSselectedSplatsChanged += UpdateSplatInfo;
-            // 切换模式时按钮样式调整
-            Status.PlayModeChanged += OnPlayModeUpdate;
-            //切换到浏览模式
+        }
+
+        private void Start()
+        {
+            // 初始化UI逻辑
+            InitializeLeftArea();
+            InitializeBackPanel();
+            InitializeSettingPanel();
+            // 切换到浏览模式
             Status.SwitchViewMode();
-            //初始化场景信息
+            // 初始化场景信息
             if (gaussianSplats)
             {
                 UpdateSplatInfo(gsRenderer, EventArgs.Empty);
             }
+        }
+
+        /// <summary>
+        /// 反转右侧属性菜单的激活性
+        /// </summary>
+        public void ToggleSettingPanelActive()
+        {
+            settingPanel.SetActive(!settingPanel.activeSelf);
         }
 
         /// <summary>
@@ -124,16 +162,47 @@ namespace GSTestScene
             DestroyImmediate(gaussianSplats);
             SceneManager.LoadScene("Start");
         }
-        
+
+        /// <summary>
+        /// 按下物理模拟按钮后的回调
+        /// </summary>
+        public void HandleSimulateClick()
+        {
+            if (gsRenderer.asset.enableSimulate)
+            {
+                if (Status.playMode == PlayMode.Simulate)
+                {
+                    GetComponent<GaussianSimulator>().ResetSimulate();
+                    Status.SwitchViewMode();
+                    SetButtonColor(simulateButton, DisableColor);
+                    simulateText.SetText("Start Simulate (6)");
+                }
+
+                else
+                {
+                    ShowTip("Press 'Space' to pause the process of simulation");
+                    GetComponent<GaussianSimulator>().StartSimulate();
+                    Status.SwitchSilumateMode();
+                    SetButtonColor(simulateButton, EnableColor);
+                    simulateText.SetText("Reset (6)");
+                }
+            }
+            else
+            {
+                ShowTip(
+                    "This asset is not simulatable because you did not set it when creating. Please try another asset toggled with \"Enable Simulation\" option.");
+            }
+        }
+
         /// <summary>
         /// 实例化一个Tips组件显示Tips.保证任何时候仅存在一个组件
         /// </summary>
         /// <param name="tips">要显示的tips</param>
         /// <param name="unique">是否使用唯一提示组件。若为否则额外生成临时提示组件（只能由用户摧毁）</param>
         /// <returns>生成的组件实例</returns>
-        public static GameObject ShowTip(string tips, bool unique=true)
+        public static GameObject ShowTip(string tips, bool unique = true)
         {
-            if(!TipsPanelPrefab||!_mainCanvas)return null;
+            if (!TipsPanelPrefab || !_mainCanvas) return null;
             if (unique)
             {
                 if (TipsPanel)
@@ -146,11 +215,10 @@ namespace GSTestScene
                 return TipsPanel;
             }
 
-            GameObject tempTipsPanel= Instantiate(TipsPanelPrefab, _mainCanvas.transform);
+            GameObject tempTipsPanel = Instantiate(TipsPanelPrefab, _mainCanvas.transform);
             tempTipsPanel.GetComponent<TipsManager>().SetTipText(tips);
             return tempTipsPanel;
         }
-
 
 
         /// <summary>
@@ -196,14 +264,18 @@ namespace GSTestScene
         private void UpdateSplatInfo(Object obj, EventArgs _)
         {
             GaussianSplatRenderer gaussianSplatRenderer = obj as GaussianSplatRenderer;
+            if (!gaussianSplatRenderer) return;
             splatCountText.SetText(
                 $"Splat Count \n Selected / Total : {gaussianSplatRenderer?.editSelectedSplats} / {gaussianSplatRenderer?.splatCount}");
+            splatOpacitySlider.value = gaussianSplatRenderer.m_OpacityScale;
+            splatScaleSlider.value = gaussianSplatRenderer.m_SplatScale;
+            renderModeDropdown.value = (int)gaussianSplatRenderer.m_RenderMode;
         }
 
         /// <summary>
         /// 导出当前活动的GS为点云文件
         /// </summary>
-        private void ExportPlyFile()
+        public void ExportPlyFile()
         {
             GaussianSplatRendererEditor.ExportPlyFile(gsRenderer, false);
         }

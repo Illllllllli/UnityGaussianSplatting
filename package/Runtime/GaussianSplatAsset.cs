@@ -152,9 +152,10 @@ namespace GaussianSplatting.Runtime
         /// <param name="dataOther">缩放数据块</param>
         /// <param name="dataColor">颜色数据块</param>
         /// <param name="dataSh">sh数据块</param>
-        public void SetAssetFiles(string dataPath ,bool edit,ByteAsset  dataChunk, ByteAsset dataPos, ByteAsset dataOther, ByteAsset dataColor, ByteAsset dataSh)
+        public void SetAssetFiles(string dataPath ,bool edit,bool simulate,ByteAsset  dataChunk, ByteAsset dataPos, ByteAsset dataOther, ByteAsset dataColor, ByteAsset dataSh)
         {
             enableEdit = edit;
+            enableSimulate = simulate;
             assetDataPath = dataPath;
             m_ChunkData = dataChunk;
             m_PosData = dataPos;
@@ -268,8 +269,12 @@ namespace GaussianSplatting.Runtime
 
         // 存储对应assetData的数据路径；
         public string assetDataPath;
+        // 是否可编辑
         public bool enableEdit;
-
+        // 是否可模拟
+        public bool enableSimulate;
+        
+        
         public VectorFormat posFormat => m_PosFormat;
         public VectorFormat scaleFormat => m_ScaleFormat;
         public SHFormat shFormat => m_SHFormat;

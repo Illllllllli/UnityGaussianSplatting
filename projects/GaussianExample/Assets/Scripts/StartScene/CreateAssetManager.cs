@@ -2,10 +2,7 @@ using System;
 using System.Collections;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Runtime.Serialization.Formatters.Binary;
-using System.Text;
-using System.Threading.Tasks;
 using GaussianSplatting.Editor;
 using GaussianSplatting.Editor.Utils;
 using GaussianSplatting.Runtime;
@@ -29,17 +26,23 @@ namespace StartScene
 
         public Button browseColmapButton;
 
+        public Button browseMeshButton;
+
         public TMP_InputField inputFileField;
 
         public TMP_InputField outputFolderField;
 
         public TMP_InputField colmapDirField;
 
+        public TMP_InputField meshFileField;
+
         public TMP_InputField assetNameField;
 
         public Toggle importCameraToggle;
 
         public Toggle enableEditToggle;
+
+        public Toggle enableSimulationToggle;
 
         public TMP_Dropdown qualityDropdown;
 
@@ -82,8 +85,10 @@ namespace StartScene
         // 一些参数
         private string _inputFile;
         private string _colmapDir;
+        private string _meshFile;
         private bool _importCameras = true;
         private bool _enableEdit;
+        private bool _enableSimulate;
         private string _outputDir = Status.SceneFileRootPlayer;
         private string _assetName;
         private DataQuality _quality = DataQuality.Medium;
@@ -357,36 +362,48 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
                 }
             });
             colmapDirField.onValueChanged.AddListener(value => _colmapDir = value);
+            meshFileField.onValueChanged.AddListener(value => _meshFile = value);
 
             // 文件浏览按钮回调
             browseInputButton.onClick.AddListener(() =>
             {
                 FileBrowser.SetFilters(false, new FileBrowser.Filter("点云文件", ".ply", ".slz"));
-                StartCoroutine(HandleFileBrowser(false));
+                StartCoroutine(HandleFileBrowser(inputFileField, false));
             });
 
-            browseColmapButton.onClick.AddListener(() => StartCoroutine(HandleFileBrowser(true)));
+            browseColmapButton.onClick.AddListener(() => StartCoroutine(HandleFileBrowser(colmapDirField, true)));
+            browseMeshButton.onClick.AddListener(() =>
+            {
+                FileBrowser.SetFilters(false, new FileBrowser.Filter("网格文件", ".txt"));
+                StartCoroutine(HandleFileBrowser(meshFileField, false));
+            });
         }
 
         /// <summary>
-        /// 初始化关闭按钮，导入相机选项和创建资产按钮
+        /// 初始化关闭按钮，导入相机/启用编辑/启用模拟选项和创建资产按钮
         /// </summary>
         private void InitializeOthers()
         {
             closeButton.onClick.AddListener(() => gameObject.SetActive(false));
             importCameraToggle.onValueChanged.AddListener(value => _importCameras = value);
-            enableEditToggle.onValueChanged.AddListener(value=>
+            enableEditToggle.onValueChanged.AddListener(value =>
             {
                 colmapDirField.interactable = value;
                 browseColmapButton.interactable = value;
                 _enableEdit = value;
             });
+            enableSimulationToggle.onValueChanged.AddListener(value =>
+            {
+                meshFileField.interactable = value;
+                browseMeshButton.interactable = value;
+                _enableSimulate = value;
+            });
             createAssetButton.onClick.AddListener(() =>
             {
                 GaussianSplatAsset asset = CreateAsset();
                 // 显示提示
-                MainUIManager.ShowTip( asset?
-                                      $"Successfully Create Asset Data for {_inputFile} at {_outputDir}": _errorMessage,false);
+                MainUIManager.ShowTip(
+                    asset ? $"Successfully Create Asset Data for {_inputFile} at {_outputDir}" : _errorMessage, false);
                 if (asset)
                 {
                     StartCoroutine(SceneLoader.LoadGaussianSplatAssets());
@@ -395,24 +412,18 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
         }
 
         /// <summary>
-        /// 配置文件浏览逻辑
+        /// 配置文件浏览逻辑，并在完成后更新输入框内容
         /// </summary>
+        /// <param name="inputField">输入框</param>
         /// <param name="isDirectory">选择文件夹或是文件</param>
         /// <returns></returns>
-        private IEnumerator HandleFileBrowser(bool isDirectory)
+        private IEnumerator HandleFileBrowser(TMP_InputField inputField, bool isDirectory)
         {
             yield return FileBrowser.WaitForLoadDialog(
                 isDirectory ? FileBrowser.PickMode.Folders : FileBrowser.PickMode.Files, allowMultiSelection: false);
             if (FileBrowser.Success)
             {
-                if (isDirectory)
-                {
-                    colmapDirField.text = FileBrowser.Result[0];
-                }
-                else
-                {
-                    inputFileField.text = FileBrowser.Result[0];
-                }
+                inputField.text = FileBrowser.Result[0];
             }
         }
 
@@ -598,7 +609,7 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
         /// <returns></returns>
         public static unsafe GaussianSplatAsset CreateAsset(string inputFile, string outputDir, string assetName,
             GaussianSplatAsset.VectorFormat formatPos, GaussianSplatAsset.VectorFormat formatScale,
-            GaussianSplatAsset.ColorFormat formatColor, GaussianSplatAsset.SHFormat formatSH,bool overwrite=true)
+            GaussianSplatAsset.ColorFormat formatColor, GaussianSplatAsset.SHFormat formatSH, bool overwrite = true)
         {
             // 路径检查
             if (string.IsNullOrWhiteSpace(inputFile))
@@ -676,7 +687,7 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
             clusteredSHs.Dispose();
 
 
-            asset.SetAssetFiles(outputDir, false, null,
+            asset.SetAssetFiles(outputDir, false, false, null,
                 ByteAsset.CreateByteAssetFromFile(posPath),
                 ByteAsset.CreateByteAssetFromFile(otherPath),
                 ByteAsset.CreateByteAssetFromFile(colorPath),
@@ -686,12 +697,11 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
             BinaryFormatter formatter = new BinaryFormatter();
             // 由于scriptableObject没有被标记为可序列化，因此需要使用自定义数据类实现外部存储
             GaussianSplatAssetData assetData =
-                new GaussianSplatAssetData(asset, outputDir, false, useChunks, chunkPath, posPath, otherPath, colorPath,
+                new GaussianSplatAssetData(asset, outputDir, false, false, useChunks, chunkPath, posPath, otherPath,
+                    colorPath,
                     shPath);
-            using (FileStream stream = new FileStream(assetDataPath, FileMode.Create))
-            {
-                formatter.Serialize(stream, assetData);
-            }
+            using FileStream stream = new FileStream(assetDataPath, FileMode.Create);
+            formatter.Serialize(stream, assetData);
 
             return asset;
         }
@@ -727,6 +737,13 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
                 return null;
             }
 
+            if (_enableSimulate && !File.Exists(_meshFile))
+            {
+                _errorMessage = $"Invalid mesh file {_colmapDir}";
+                return null;
+            }
+
+
             // 创建提示信息
             TipsManager infoTips = MainUIManager.ShowTip("Creating Asset...").GetComponent<TipsManager>();
             infoTips.SetButtonInteractable(false);
@@ -742,12 +759,23 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
                 {
                     return null;
                 }
+
                 // 复制点云文件到文件夹中
                 string plyOutputDir = Path.Join(_outputDir, Status.AssetPlyFileLocalDir);
                 string plyOutputPath = Path.Join(plyOutputDir, Status.AssetPlyFileName);
                 Directory.CreateDirectory(plyOutputDir);
-                File.Copy(_inputFile,plyOutputPath,true);
+                File.Copy(_inputFile, plyOutputPath, true);
             }
+
+            // 复制网格文件
+            if (_enableSimulate)
+            {
+                string meshOutputDir = Path.Join(_outputDir, Status.AssetMeshFileLocalDir);
+                string meshOutputPath = Path.Join(meshOutputDir, Status.AssetMeshFileName);
+                Directory.CreateDirectory(meshOutputDir);
+                File.Copy(_meshFile, meshOutputPath, true);
+            }
+
 
             //导入相机参数（如有）
             GaussianSplatAsset.CameraInfo[] cameras =
@@ -818,7 +846,8 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
             // 绑定子数据文件和主文件
             infoTips.SetTipText("Setup data onto asset");
 
-            asset.SetAssetFiles(_outputDir, _enableEdit, useChunks ? ByteAsset.CreateByteAssetFromFile(chunkPath) : null,
+            asset.SetAssetFiles(_outputDir, _enableEdit, _enableSimulate,
+                useChunks ? ByteAsset.CreateByteAssetFromFile(chunkPath) : null,
                 ByteAsset.CreateByteAssetFromFile(posPath),
                 ByteAsset.CreateByteAssetFromFile(otherPath),
                 ByteAsset.CreateByteAssetFromFile(colorPath),
@@ -830,7 +859,8 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
             BinaryFormatter formatter = new BinaryFormatter();
             // 由于scriptableObject没有被标记为可序列化，因此需要使用自定义数据类实现外部存储
             GaussianSplatAssetData assetData =
-                new GaussianSplatAssetData(asset, _outputDir, _enableEdit, useChunks, chunkPath, posPath, otherPath,
+                new GaussianSplatAssetData(asset, _outputDir, _enableEdit, _enableSimulate, useChunks, chunkPath,
+                    posPath, otherPath,
                     colorPath,
                     shPath);
             using (FileStream stream = new FileStream(assetDataPath, FileMode.Create))

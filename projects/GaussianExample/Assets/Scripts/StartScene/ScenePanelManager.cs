@@ -1,10 +1,6 @@
-using System;
 using GaussianSplatting.Runtime;
-using GSTestScene;
 using TMPro;
 using UnityEngine;
-using UnityEngine.SceneManagement;
-using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 namespace StartScene
@@ -12,23 +8,27 @@ namespace StartScene
     public class ScenePanelManager : MonoBehaviour
     {
         // 提示信息
-        public GameObject sceneNameText;
+        public TextMeshProUGUI sceneNameText;
 
-        public GameObject editableText;
+        public TextMeshProUGUI editableText;
+        
+        public TextMeshProUGUI simulatableText;
+        
+        public TextMeshProUGUI splatCountText;
 
-        public GameObject splatCountText;
+        public TextMeshProUGUI filePathText;
 
-        public GameObject filePathText;
 
         // 加载按钮
         public Button loadButton;
-        
+
         // 删除按钮
         public Button deleteButton;
 
         public TextMeshProUGUI deleteButtonText;
 
-        private bool _checkDelete = false;
+        private bool _checkDelete;
+
         // GS资产
         private GaussianSplatAsset _gaussianSplatAsset;
 
@@ -40,9 +40,9 @@ namespace StartScene
                 _gaussianSplatAsset = value;
                 sceneName = value.name;
                 editable = value.enableEdit;
+                simulatable = value.enableSimulate;
                 splatCounts = value.splatCount;
                 filePath = value.assetDataPath;
-                
             }
         }
 
@@ -59,7 +59,7 @@ namespace StartScene
                 UpdateSceneName(value);
             }
         }
-        
+
         // 场景名称
         private string _filePath;
 
@@ -86,6 +86,19 @@ namespace StartScene
             }
         }
 
+        // 是否可模拟
+        private bool _simulatable;
+
+        private bool simulatable
+        {
+            get => _simulatable;
+            set
+            {
+                _simulatable = value;
+                UpdateSimulatable(value);
+            }
+        }
+
         // GS数量
         private int _splatCounts;
 
@@ -103,23 +116,27 @@ namespace StartScene
         //对应的更新方法
         private void UpdateSceneName(string value)
         {
-            sceneNameText.GetComponent<TextMeshProUGUI>().SetText(value);
+            sceneNameText.SetText(value);
         }
 
         private void UpdateEditable(bool value)
         {
-            Debug.Log(value);
-            editableText.GetComponent<TextMeshProUGUI>().SetText(value.ToString());
+            editableText.SetText(value.ToString());
+        }
+
+        private void UpdateSimulatable(bool value)
+        {
+            simulatableText.SetText(value.ToString());
         }
 
         private void UpdateSplatCount(int value)
         {
-            splatCountText.GetComponent<TextMeshProUGUI>().SetText(value.ToString());
+            splatCountText.SetText(value.ToString());
         }
-        
+
         private void UpdateFilePath(string value)
         {
-            filePathText.GetComponent<TextMeshProUGUI>().SetText(value);
+            filePathText.SetText(value);
         }
 
         private void HandleDeleteAsset()
@@ -128,8 +145,8 @@ namespace StartScene
             {
                 _checkDelete = true;
                 deleteButtonText.SetText("Press again to delete asset");
-                deleteButtonText.color=Color.white;
-                deleteButton.GetComponent<Image>().color=Color.red;
+                deleteButtonText.color = Color.white;
+                deleteButton.GetComponent<Image>().color = Color.red;
             }
             else
             {
@@ -146,11 +163,11 @@ namespace StartScene
                 }
             }
         }
-        
+
 
         private void Awake()
         {
-            loadButton.onClick.AddListener(()=>SceneLoader.LoadScene(gaussianSplatAsset));
+            loadButton.onClick.AddListener(() => SceneLoader.LoadScene(gaussianSplatAsset));
             deleteButton.onClick.AddListener(HandleDeleteAsset);
         }
     }

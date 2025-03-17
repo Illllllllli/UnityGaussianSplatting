@@ -531,6 +531,7 @@ void CSRotateSelection(uint3 id : SV_DispatchThreadID)
 
     uint scaleFmt = (_SplatFormat >> 8) & 0xFF;
     uint shFormat = (_SplatFormat >> 16) & 0xFF;
+    #if 1
     if (_SplatChunkCount == 0 && scaleFmt == VECTOR_FMT_32F && shFormat == VECTOR_FMT_32F)
     {
         uint otherStride = 4 + 12;
@@ -544,6 +545,7 @@ void CSRotateSelection(uint3 id : SV_DispatchThreadID)
         rotVal = EncodeQuatToNorm10(PackSmallest3Rotation(rot));
         _SplatOther.Store(idx * otherStride, rotVal);
     }
+    #endif
     //@TODO: rotate SHs (finished)
     uint shStride = 192;
     uint shOffset = idx * shStride;

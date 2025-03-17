@@ -60,6 +60,33 @@
                     "initialStateCheck": false
                 },
                 {
+                    "name": "Export PLY",
+                    "type": "Button",
+                    "id": "4cce65c4-ef6f-42c7-86f5-5d002fbb68a4",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Show Log Info",
+                    "type": "Button",
+                    "id": "d039e0e7-0da4-4725-939f-8c91c3efd724",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Start Simulate",
+                    "type": "Button",
+                    "id": "20cabcb9-e7b9-4451-9fa9-9688d41462c6",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
                     "name": "W key",
                     "type": "Value",
                     "id": "3d36303a-d956-4ea2-9c04-37b4b048e493",
@@ -180,6 +207,15 @@
                     "name": "T key",
                     "type": "Button",
                     "id": "4085ecb8-ee01-4d95-9562-9babd97f5ef1",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Tab key",
+                    "type": "Button",
+                    "id": "afe22378-d387-4ab9-a29c-06e9f8e454f4",
                     "expectedControlType": "Button",
                     "processors": "",
                     "interactions": "",
@@ -481,6 +517,50 @@
                     "processors": "",
                     "groups": "",
                     "action": "Escape",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "4df697fd-8f73-41fb-9506-09be8f706d67",
+                    "path": "<Keyboard>/4",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Export PLY",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "cb789317-82a4-4677-8d29-6c98081f7536",
+                    "path": "<Keyboard>/5",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Show Log Info",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "5389a52c-018e-4046-85a3-76882687e9a9",
+                    "path": "<Keyboard>/tab",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Tab key",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "1d5f2fec-44e7-458f-8706-b3f837e6a666",
+                    "path": "<Keyboard>/6",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Start Simulate",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

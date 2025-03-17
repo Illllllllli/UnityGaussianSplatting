@@ -11,6 +11,7 @@ using GaussianSplatting.Runtime;
 using StartScene;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 using Debug = UnityEngine.Debug;
 using Object = System.Object;
@@ -31,7 +32,7 @@ namespace GSTestScene
         public Button editButton;
 
 
-        [Header("Command Info UI Components")] public GameObject commandInfoPanel;
+        [Header("Command Info UI Components")] public GameObject logPanel;
         public Button clearLogButton;
         public Button cancelEditButton;
         public TextMeshProUGUI editLogTextPrefab;
@@ -186,6 +187,11 @@ namespace GSTestScene
                 MainUIManager.ShowTip(
                     "This asset is not editable because you did not set it when creating. Please try another asset toggled with \"Enable Edit\" option.");
             }
+        }
+
+        public void HandleLogInfoClick()
+        {
+            logPanel.SetActive(!logPanel.activeSelf);
         }
 
 
@@ -441,7 +447,7 @@ namespace GSTestScene
             if (checkProfile)
             {
                 // UI和编辑器模式更新
-                commandInfoPanel.SetActive(true);
+                logPanel.SetActive(true);
                 editPanel.SetActive(false);
                 Status.SwitchViewMode();
                 MainUIManager.ShowTip("Edit started. Manual edits will not be saved until edit finished.");

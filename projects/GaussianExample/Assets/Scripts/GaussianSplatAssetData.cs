@@ -46,18 +46,20 @@ public class GaussianSplatAssetData
     private Vector3Internal _boundsMin;
     private Vector3Internal _boundsMax;
     private Hash128 _dataHash;
-    private GaussianSplatAsset.CameraInfo[] cameras;
+    private GaussianSplatAsset.CameraInfo[] _cameras;
 
     private string _assetDataPath;
     private string _chunkPath, _positionPath, _scalePath, _colorPath, _shPath;
     private bool _useChunks;
     private bool _enableEdit;
+    private bool _enableSimulate;
 
-    public GaussianSplatAssetData(GaussianSplatAsset asset, string assetDataPath, bool enableEdit, bool useChunks,
+    public GaussianSplatAssetData(GaussianSplatAsset asset, string assetDataPath, bool enableEdit,bool enableSimulate, bool useChunks,
         string chunkPath, string positionPath, string scalePath, string colorPath, string shPath)
     {
         _name = asset.name;
         _enableEdit = enableEdit;
+        _enableSimulate = enableSimulate;
         _formatVersion = asset.formatVersion;
         _splatCount = asset.splatCount;
         _posFormat = asset.posFormat;
@@ -67,7 +69,7 @@ public class GaussianSplatAssetData
         _boundsMin = new Vector3Internal(asset.boundsMin);
         _boundsMax = new Vector3Internal(asset.boundsMax);
         _dataHash = asset.dataHash;
-        cameras = asset.cameras;
+        _cameras = asset.cameras;
 
         // 外部数据路径
         _assetDataPath = assetDataPath;
@@ -90,9 +92,9 @@ public class GaussianSplatAssetData
         asset.name = _name;
         // 初始化
         asset.Initialize(_splatCount, _posFormat, _scaleFormat, _colorFormat, _shFormat, _boundsMin.Get(),
-            _boundsMax.Get(), cameras);
+            _boundsMax.Get(), _cameras);
         // 导入外部数据
-        asset.SetAssetFiles(_assetDataPath, _enableEdit,
+        asset.SetAssetFiles(_assetDataPath, _enableEdit,_enableSimulate,
             _useChunks ? ByteAsset.CreateByteAssetFromFile(_chunkPath) : null,
             ByteAsset.CreateByteAssetFromFile(_positionPath),
             ByteAsset.CreateByteAssetFromFile(_scalePath),

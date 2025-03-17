@@ -311,7 +311,7 @@ namespace GaussianSplatting.Editor
             EditorUtility.DisplayProgressBar(kProgressTitle, "Initial texture import", 0.85f);
             AssetDatabase.Refresh(ImportAssetOptions.ForceUncompressedImport);
             EditorUtility.DisplayProgressBar(kProgressTitle, "Setup data onto asset", 0.95f);
-            asset.SetAssetFiles(m_OutputFolder,false,
+            asset.SetAssetFiles(m_OutputFolder,false,false,
                 useChunks ? ByteAsset.CreateByteAssetFromFile(pathChunk) : null,
                 ByteAsset.CreateByteAssetFromFile(pathPos),
                 ByteAsset.CreateByteAssetFromFile(pathOther),
