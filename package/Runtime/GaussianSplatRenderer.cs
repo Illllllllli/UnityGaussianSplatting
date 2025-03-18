@@ -304,7 +304,6 @@ namespace GaussianSplatting.Runtime
         [Tooltip(
             "Rendering order compared to other splats. Within same order splats are sorted by distance. Higher order splats render 'on top of' lower order splats.")]
         public int m_RenderOrder;
-        // todo:把这些参数可视化一下。另外，加入快捷键
         // 更改高斯全局单体大小
         [Range(0.1f, 2.0f)] [Tooltip("Additional scaling factor for the splats")]
         public float m_SplatScale = 1.0f;
@@ -373,6 +372,7 @@ namespace GaussianSplatting.Runtime
         GraphicsBuffer m_GpuEditSelectedMouseDown; // selection state at start of operation
         GraphicsBuffer m_GpuEditPosMouseDown; // position state at start of operation
         GraphicsBuffer m_GpuEditOtherMouseDown; // rotation/scale state at start of operation
+        private GraphicsBuffer m_GpuEditSHMouseDown; // SH state at start of operation
 
         GpuSorting m_Sorter;
         GpuSorting.Args m_SorterArgs;
@@ -431,8 +431,9 @@ namespace GaussianSplatting.Runtime
             public static readonly int SplatCutouts = Shader.PropertyToID("_SplatCutouts");
             public static readonly int SelectionMode = Shader.PropertyToID("_SelectionMode");
             public static readonly int SplatPosMouseDown = Shader.PropertyToID("_SplatPosMouseDown");
-
             public static readonly int SplatOtherMouseDown = Shader.PropertyToID("_SplatOtherMouseDown");
+            public static readonly int SplatSHMouseDown = Shader.PropertyToID("_SplatSHMouseDown");
+
 
             // 新增的属性
             public static readonly int MatrixVP = Shader.PropertyToID("_MatrixVP");
@@ -515,7 +516,7 @@ namespace GaussianSplatting.Runtime
                 new GraphicsBuffer(GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource,
                     (int)(asset.otherData.dataSize / 4), 4) { name = "GaussianOtherData" };
             m_GpuOtherData.SetData(asset.otherData.GetData<uint>());
-            m_GpuSHData = new GraphicsBuffer(GraphicsBuffer.Target.Raw, (int)(asset.shData.dataSize / 4), 4)
+            m_GpuSHData = new GraphicsBuffer(GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource, (int)(asset.shData.dataSize / 4), 4)
                 { name = "GaussianSHData" };
             m_GpuSHData.SetData(asset.shData.GetData<uint>());
             // 创建一个 Texture2D 来存储颜色数据，并从资产中获取数据初始化这个纹理
@@ -1022,8 +1023,18 @@ namespace GaussianSplatting.Runtime
                     new GraphicsBuffer(m_GpuOtherData.target | GraphicsBuffer.Target.CopyDestination,
                         m_GpuOtherData.count, m_GpuOtherData.stride) { name = "GaussianSplatEditOtherMouseDown" };
             }
-
             Graphics.CopyBuffer(m_GpuOtherData, m_GpuEditOtherMouseDown);
+        }
+
+        public void EditStoreShMouseDown()
+        {
+            if (m_GpuEditSHMouseDown == null)
+            {
+                m_GpuEditSHMouseDown =
+                    new GraphicsBuffer(m_GpuSHData.target | GraphicsBuffer.Target.CopyDestination,
+                        m_GpuSHData.count, m_GpuSHData.stride) { name = "GaussianSplatEditSHMouseDown" };
+            }
+            Graphics.CopyBuffer(m_GpuSHData, m_GpuEditSHMouseDown);
         }
 
         public void EditUpdateSelection(Vector2 rectMin, Vector2 rectMax, Camera cam, bool subtract)
@@ -1077,8 +1088,8 @@ namespace GaussianSplatting.Runtime
             Quaternion rotation)
         {
             if (!EnsureEditingBuffers()) return;
-            // 这两个缓冲区分别存储编辑之前高斯的位置信息和其他信息（如SH,颜色，缩放等）。在旋转编辑过程中需要使用
-            if (m_GpuEditPosMouseDown == null || m_GpuEditOtherMouseDown == null)
+            // 这三个缓冲区分别存储编辑之前高斯的位置信息和其他信息（如SH,颜色，缩放等）。在旋转编辑过程中需要使用
+            if (m_GpuEditPosMouseDown == null || m_GpuEditOtherMouseDown == null || m_GpuEditSHMouseDown == null)
                 return; // should have captured initial state
             
             using var cmb = new CommandBuffer { name = "SplatRotateSelection" };
@@ -1088,6 +1099,7 @@ namespace GaussianSplatting.Runtime
                 m_GpuEditPosMouseDown);
             cmb.SetComputeBufferParam(m_CSSplatUtilities, (int)KernelIndices.RotateSelection, Props.SplatOtherMouseDown,
                 m_GpuEditOtherMouseDown);
+            cmb.SetComputeBufferParam(m_CSSplatUtilities,(int)KernelIndices.RotateSelection,Props.SplatSHMouseDown,m_GpuEditSHMouseDown);
             cmb.SetComputeVectorParam(m_CSSplatUtilities, Props.SelectionCenter, localSpaceCenter);
             cmb.SetComputeMatrixParam(m_CSSplatUtilities, Props.MatrixObjectToWorld, localToWorld);
             cmb.SetComputeMatrixParam(m_CSSplatUtilities, Props.MatrixWorldToObject, worldToLocal);

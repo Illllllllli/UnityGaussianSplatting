@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Linq;
 using GaussianSplatting.Editor;
 using GaussianSplatting.Runtime;
@@ -49,9 +50,12 @@ namespace GSTestScene
         public Button editButton;
         public Button exportButton;
         public Button editInfoButton;
+
         public Button simulateButton;
+
         // 模拟按钮的文本切换
         public TextMeshProUGUI simulateText;
+
         // 标识GS数量
         public TextMeshProUGUI splatCountText;
 
@@ -120,6 +124,9 @@ namespace GSTestScene
             GaussianSplatRenderer.onEditSselectedSplatsChanged += UpdateSplatInfo;
         }
 
+        //备用
+        public Button testButton;
+
         private void Start()
         {
             // 初始化UI逻辑
@@ -133,6 +140,10 @@ namespace GSTestScene
             {
                 UpdateSplatInfo(gsRenderer, EventArgs.Empty);
             }
+            testButton.onClick.AddListener(() =>
+            {
+            });
+            
         }
 
         /// <summary>

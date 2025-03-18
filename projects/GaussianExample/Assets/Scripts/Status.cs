@@ -25,8 +25,8 @@ public class Status : MonoBehaviour
 
     // 框选编辑位移/旋转/缩放灵敏度
     public const float EditTranslateSensitivity = 0.01f;
-    public const float EditRotateSensitivity = 0.1f;
-    public const float EditScaleSensitivity = 0.01f;
+    public const float EditRotateSensitivity = 0.2f;
+    public const float EditScaleSensitivity = 0.02f;
 
 
     // 基准/最小/最大FoV
@@ -283,16 +283,19 @@ internal static class GsTools
     }
 
     /// <summary>
-    /// 获取已选中GS区域的中心坐标
+    /// 获取已选中GS区域的本地中心坐标
     /// </summary>
     /// <param name="renderer">对应的GS对象</param>
     /// <returns></returns>
     public static Vector3 GetSelectionCenterLocal(GaussianSplatRenderer renderer)
     {
+        Debug.Log(renderer.editSelectedBounds.extents);
         if (renderer && renderer.editSelectedSplats > 0)
             return renderer.editSelectedBounds.center;
         return Vector3.zero;
     }
+    
+    
 
     /// <summary>
     /// 根据相机视角，从鼠标位移得到世界坐标位移

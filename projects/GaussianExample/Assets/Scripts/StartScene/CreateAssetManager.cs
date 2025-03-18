@@ -91,7 +91,7 @@ namespace StartScene
         private bool _enableSimulate;
         private string _outputDir = Status.SceneFileRootPlayer;
         private string _assetName;
-        private DataQuality _quality = DataQuality.Medium;
+        private DataQuality _quality = DataQuality.VeryHigh;
 
         private DataQuality quality
         {
@@ -285,6 +285,7 @@ namespace StartScene
             dropdown.options.Clear();
             dropdown.options.AddRange(Enum.GetNames(enumType).Select(enumName => new TMP_Dropdown.OptionData(enumName))
                 .ToList());
+            dropdown.value = 0;
         }
 
         /// <summary>
@@ -300,14 +301,47 @@ namespace StartScene
             InitializeDropdownOption(shDropdown, typeof(GaussianSplatAsset.SHFormat));
 
             // 添加回调
-            qualityDropdown.onValueChanged.AddListener((newQuality => quality = (DataQuality)newQuality));
+            qualityDropdown.onValueChanged.AddListener((newQuality =>
+            {
+                quality = (DataQuality)newQuality;
+            }));
             positionDropdown.onValueChanged.AddListener(newQuality =>
-                formatPos = (GaussianSplatAsset.VectorFormat)newQuality);
+            {
+                if (newQuality != (int)GaussianSplatAsset.VectorFormat.Float32)
+                {
+                    MainUIManager.ShowTip(
+                        "The select and simulate function may not work correctly if the Position Format is not Float32. Please remind.");
+                }
+                formatPos = (GaussianSplatAsset.VectorFormat)newQuality;
+                
+            });
             scaleDropdown.onValueChanged.AddListener(newQuality =>
-                formatScale = (GaussianSplatAsset.VectorFormat)newQuality);
+            {
+                if (newQuality != (int)GaussianSplatAsset.VectorFormat.Float32)
+                {
+                    MainUIManager.ShowTip(
+                        "The select and simulate function may not work correctly if the Scale Format is not Float32. Please remind.");
+                }
+                formatScale = (GaussianSplatAsset.VectorFormat)newQuality;
+            });
             colorDropdown.onValueChanged.AddListener(newQuality =>
-                formatColor = (GaussianSplatAsset.ColorFormat)newQuality);
-            shDropdown.onValueChanged.AddListener(newQuality => formatSH = (GaussianSplatAsset.SHFormat)newQuality);
+            {
+                if (newQuality != (int)GaussianSplatAsset.ColorFormat.Float32x4)
+                {
+                    MainUIManager.ShowTip(
+                        "The select and simulate function may not work correctly if the Color Format is not Float32x4. Please remind.");
+                }
+                formatColor = (GaussianSplatAsset.ColorFormat)newQuality;
+            });
+            shDropdown.onValueChanged.AddListener(newQuality =>
+            {
+                if (newQuality != (int)GaussianSplatAsset.SHFormat.Float32)
+                {
+                    MainUIManager.ShowTip(
+                        "The select and simulate function may not work correctly if the SH Format is not Float32. Please remind.");
+                }
+                formatSH = (GaussianSplatAsset.SHFormat)newQuality;
+            });
         }
 
         /// <summary>
@@ -784,7 +818,7 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
             using NativeArray<InputSplatData> inputSplats = LoadInputSplatFile(_inputFile, out _errorMessage);
             if (inputSplats.Length == 0)
             {
-                Destroy(infoTips.gameObject);
+                _errorMessage = "The input PLY/SLZ file is not available";
                 return null;
             }
 

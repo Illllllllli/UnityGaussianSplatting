@@ -246,6 +246,7 @@ namespace GSTestScene
                         _mouseRotateAccumulation += mouseDelta.x;
                         gsRenderer.EditStorePosMouseDown();
                         gsRenderer.EditStoreOtherMouseDown();
+                        gsRenderer.EditStoreShMouseDown();
                         gsRenderer.EditRotateSelection(_selectedCenterRotate, gsRenderer.transform.localToWorldMatrix,
                             gsRenderer.transform.worldToLocalMatrix,
                             Quaternion.AngleAxis(mouseDelta.x * Status.EditRotateSensitivity, _cameraForwardRotate));
@@ -316,7 +317,6 @@ namespace GSTestScene
 
         private void Start()
         {
-            Debug.Log(Status.isInteractive);
             // 初始化
             _userAction = new UserAction();
             _userAction.Enable();
