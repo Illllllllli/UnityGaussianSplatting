@@ -1,0 +1,90 @@
+﻿// 用于物理模拟计算
+#pragma kernel select_vertices
+#pragma kernel clean_selected_vertices
+
+// 输入数据
+
+float3 controller_position; //控制器的位置
+float3 controller_velocity; //控制器的速度
+float3 controller_angle_velocity; //控制器的角速度
+float controller_radius; //控制器影响半径
+
+
+RWStructuredBuffer<float3> vertices_x; //一级顶点数据（所有顶点）
+RWStructuredBuffer<float3> vertices_X; //二级顶点数据（部分顶点）
+
+RWStructuredBuffer<int> selected_vertices_ids; //被选中的顶点的索引列表（1为被选中）
+
+
+/**
+ * 将四元数转换为 3x3 旋转矩阵
+ * @param q 四元数
+ * @return 四元数对应的旋转矩阵
+ */
+float3x3 quaternion_to_matrix(float4 q)
+{
+    // 确保四元数已归一化
+    q = normalize(q);
+
+    float x = q.x;
+    float y = q.y;
+    float z = q.z;
+    float w = q.w;
+
+    float x2 = x + x;
+    float y2 = y + y;
+    float z2 = z + z;
+    float xx = x * x2;
+    float xy = x * y2;
+    float xz = x * z2;
+    float yy = y * y2;
+    float yz = y * z2;
+    float zz = z * z2;
+    float wx = w * x2;
+    float wy = w * y2;
+    float wz = w * z2;
+
+    float3x3 m;
+    m._m00 = 1.0 - (yy + zz);
+    m._m01 = xy - wz;
+    m._m02 = xz + wy;
+
+    m._m10 = xy + wz;
+    m._m11 = 1.0 - (xx + zz);
+    m._m12 = yz - wx;
+
+    m._m20 = xz - wy;
+    m._m21 = yz + wx;
+    m._m22 = 1.0 - (xx + yy);
+
+    return m;
+}
+
+
+/**
+ * 根据控制器位置更新选定的顶点
+ * @param id 线程ID
+ */
+[numthreads(256,1,1)]
+void select_vertices(uint3 id : SV_DispatchThreadID)
+{
+    const uint idx = id.x;
+    const float3 pos = vertices_x[idx];
+    const float dist = distance(pos, controller_position);
+
+    if (dist <= controller_radius)
+    {
+        selected_vertices_ids[idx] |= 1; // 使用最低位表示选中状态
+    }
+}
+
+/**
+ * 清除选定的顶点
+ * @param id 线程ID
+ */
+[numthreads(256,1,1)]
+void clean_selected_vertices(uint3 id : SV_DispatchThreadID)
+{
+    const uint idx = id.x;
+    selected_vertices_ids[idx] &= ~1; // 清除最低位
+}

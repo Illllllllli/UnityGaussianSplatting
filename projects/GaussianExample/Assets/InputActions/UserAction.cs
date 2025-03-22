@@ -242,6 +242,15 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""Space"",
+                    ""type"": ""Button"",
+                    ""id"": ""363cee23-ca22-431d-b80f-7785674ea159"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
                 }
             ],
             ""bindings"": [
@@ -585,6 +594,17 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""action"": ""Start Simulate"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""062ec981-5070-4720-be81-0e1ea13a44a3"",
+                    ""path"": ""<Keyboard>/space"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Space"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
                 }
             ]
         }
@@ -617,6 +637,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         m_Player_Rkey = m_Player.FindAction("R key", throwIfNotFound: true);
         m_Player_Tkey = m_Player.FindAction("T key", throwIfNotFound: true);
         m_Player_Tabkey = m_Player.FindAction("Tab key", throwIfNotFound: true);
+        m_Player_Space = m_Player.FindAction("Space", throwIfNotFound: true);
     }
 
     public void Dispose()
@@ -702,6 +723,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
     private readonly InputAction m_Player_Rkey;
     private readonly InputAction m_Player_Tkey;
     private readonly InputAction m_Player_Tabkey;
+    private readonly InputAction m_Player_Space;
     public struct PlayerActions
     {
         private @UserAction m_Wrapper;
@@ -730,6 +752,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         public InputAction @Rkey => m_Wrapper.m_Player_Rkey;
         public InputAction @Tkey => m_Wrapper.m_Player_Tkey;
         public InputAction @Tabkey => m_Wrapper.m_Player_Tabkey;
+        public InputAction @Space => m_Wrapper.m_Player_Space;
         public InputActionMap Get() { return m_Wrapper.m_Player; }
         public void Enable() { Get().Enable(); }
         public void Disable() { Get().Disable(); }
@@ -811,6 +834,9 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
             @Tabkey.started += instance.OnTabkey;
             @Tabkey.performed += instance.OnTabkey;
             @Tabkey.canceled += instance.OnTabkey;
+            @Space.started += instance.OnSpace;
+            @Space.performed += instance.OnSpace;
+            @Space.canceled += instance.OnSpace;
         }
 
         private void UnregisterCallbacks(IPlayerActions instance)
@@ -887,6 +913,9 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
             @Tabkey.started -= instance.OnTabkey;
             @Tabkey.performed -= instance.OnTabkey;
             @Tabkey.canceled -= instance.OnTabkey;
+            @Space.started -= instance.OnSpace;
+            @Space.performed -= instance.OnSpace;
+            @Space.canceled -= instance.OnSpace;
         }
 
         public void RemoveCallbacks(IPlayerActions instance)
@@ -930,5 +959,6 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         void OnRkey(InputAction.CallbackContext context);
         void OnTkey(InputAction.CallbackContext context);
         void OnTabkey(InputAction.CallbackContext context);
+        void OnSpace(InputAction.CallbackContext context);
     }
 }

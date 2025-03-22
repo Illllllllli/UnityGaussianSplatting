@@ -1,5 +1,6 @@
 using System;
 using GaussianSplatting.Runtime;
+using GSTestScene.Simulation;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.Serialization;
@@ -20,10 +21,11 @@ namespace GSTestScene
                 GameObject gaussianSplats = Instantiate(gaussianSplatScenePrefab);
                 gaussianSplats.GetComponent<GaussianSplatRenderer>().m_Asset = gaussianSplatAsset;
                 // 为其他脚本设置GS对象
-                // （由于其他脚本还没有适配多个物体，先这么写）
+                // 目前只有GaussianSimulator组件适配了多个物体
                 GetComponent<MainUIManager>().gaussianSplats = gaussianSplats;
                 GetComponent<UserActionListener>().gaussianSplats = gaussianSplats;
                 GetComponent<EditManager>().gaussianSplats = gaussianSplats;
+                GetComponent<GaussianSimulator>().GaussianSplats.Add(gaussianSplats);
             }
         }
     }

@@ -141,12 +141,13 @@ namespace GaussianSplatting.Runtime
 
             return posData.dataSize > 0 && otherData.dataSize > 0 && colorData.dataSize > 0 && shData.dataSize > 0;
         }
-        
+
         /// <summary>
         /// 创建资产时，设置资产的ByteAsset数据块.
         /// </summary>
         /// <param name="dataPath">资产路径文件夹</param>
         /// <param name="edit">是否可编辑（需要colmap文件）</param>
+        /// <param name="simulate">是否可模拟（需要网格文件）</param>
         /// <param name="dataChunk">压缩数据块</param>
         /// <param name="dataPos">位置数据块</param>
         /// <param name="dataOther">缩放数据块</param>

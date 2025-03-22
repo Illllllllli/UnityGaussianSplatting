@@ -1,9 +1,11 @@
 using System;
 using GaussianSplatting.Editor;
 using GaussianSplatting.Runtime;
+using GSTestScene.Simulation;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Serialization;
 
 //监听鼠标事件
 namespace GSTestScene
@@ -14,7 +16,7 @@ namespace GSTestScene
         public GameObject gaussianSplats;
         public Camera mainCamera;
 
-        private bool _isMousePressed;
+        public bool isMousePressed;
         private Vector3 _cameraMovement = Vector3.zero;
 
         private GaussianSplatRenderer gsRenderer => gaussianSplats?.GetComponent<GaussianSplatRenderer>();
@@ -46,7 +48,7 @@ namespace GSTestScene
             // 鼠标左键按下
             _userAction.Player.MouseLeftClick.performed += _ =>
             {
-                _isMousePressed = true;
+                isMousePressed = true;
                 //当前为选择模式且鼠标不在UI上且不是在编辑状态下
                 if (Status.playMode == PlayMode.Select && Status.selectEditMode == SelectEditMode.None &&
                     !GsTools.IsPointerOverUIObject())
@@ -68,7 +70,7 @@ namespace GSTestScene
             // 鼠标左键抬起
             _userAction.Player.MouseLeftClick.canceled += _ =>
             {
-                _isMousePressed = false;
+                isMousePressed = false;
                 if (Status.playMode == PlayMode.Select)
                 {
                     _mouseStartSelectPos = Vector2.zero;
@@ -77,7 +79,7 @@ namespace GSTestScene
             // 监听鼠标移动
             _userAction.Player.MouseMovement.performed += _ =>
             {
-                if (!_isMousePressed) return;
+                if (!isMousePressed) return;
                 if (Status.isInteractive < 0) return;
                 if (GsTools.IsPointerOverUIObject()) return;
                 //选择模式下移动（选择GS）
@@ -114,8 +116,8 @@ namespace GSTestScene
         private void BindButtonInput()
         {
             //切换模式
-            _userAction.Player.SwitchViewMode.performed += _ =>  Status.SwitchViewMode();
-            _userAction.Player.SwitchSelectMode.performed += _ =>  Status.SwitchSelectMode(); 
+            _userAction.Player.SwitchViewMode.performed += _ => Status.SwitchViewMode();
+            _userAction.Player.SwitchSelectMode.performed += _ => Status.SwitchSelectMode();
             //显示编辑，面板
             _userAction.Player.ShowEditPanel.performed += _ => GetComponent<EditManager>().HandleEditClick();
             //显示返回开始页面面板
@@ -164,7 +166,7 @@ namespace GSTestScene
             //旋转视角
             _userAction.Player.MouseMovement.performed += ctx =>
             {
-                if (!_isMousePressed) return;
+                if (!isMousePressed) return;
                 if (Status.isInteractive < 0) return;
                 if (GsTools.IsPointerOverUIObject()) return;
                 if (Status.playMode == PlayMode.Select) return;
@@ -257,7 +259,7 @@ namespace GSTestScene
                         _mouseScaleAccumulation *= mouseDelta.y;
                         gsRenderer.EditStorePosMouseDown();
                         gsRenderer.EditStoreOtherMouseDown();
-                        float scale =1+ Status.EditScaleSensitivity * mouseDelta.y;
+                        float scale = 1 + Status.EditScaleSensitivity * mouseDelta.y;
                         Vector3 scaleVector = new Vector3(scale, scale, scale);
                         gsRenderer.EditScaleSelection(_selectedCenterScale, gsRenderer.transform.localToWorldMatrix,
                             gsRenderer.transform.worldToLocalMatrix, scaleVector);
@@ -312,7 +314,41 @@ namespace GSTestScene
                 Status.StartSelectScaleEdit();
             };
         }
-        
+
+        /// <summary>
+        /// 绑定模拟过程中的输入
+        /// </summary>
+        private void BindSimulateInput()
+        {
+            _userAction.Player.MouseLeftClick.performed += _ =>
+            {
+                if (Status.playMode == PlayMode.Simulate && Status.IsSimulating)
+                {
+                    GetComponent<GaussianSimulator>().MouseDown();
+                }
+            };
+            _userAction.Player.MouseLeftClick.canceled += _ =>
+            {
+                if (Status.playMode == PlayMode.Simulate && Status.IsSimulating)
+                {
+                    GetComponent<GaussianSimulator>().MouseUp();
+                }
+            };
+            _userAction.Player.Space.performed += _ =>
+            {
+                if (Status.playMode == PlayMode.Simulate)
+                {
+                    if (Status.IsSimulating)
+                    {
+                        GetComponent<GaussianSimulator>().PauseSimulate();
+                    }
+                    else
+                    {
+                        GetComponent<GaussianSimulator>().StartSimulate(false);
+                    }
+                }
+            };
+        }
 
 
         private void Start()
@@ -325,6 +361,7 @@ namespace GSTestScene
             BindCameraTransformInput();
             BindSelectFuncInput();
             BindSelectModeInput();
+            BindSimulateInput();
         }
 
 

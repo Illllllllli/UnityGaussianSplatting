@@ -3,6 +3,7 @@ using System.Collections;
 using System.Linq;
 using GaussianSplatting.Editor;
 using GaussianSplatting.Runtime;
+using GSTestScene.Simulation;
 using StartScene;
 using TMPro;
 using UnityEngine;
@@ -192,8 +193,8 @@ namespace GSTestScene
                 else
                 {
                     ShowTip("Press 'Space' to pause the process of simulation");
-                    GetComponent<GaussianSimulator>().StartSimulate();
-                    Status.SwitchSilumateMode();
+                    GetComponent<GaussianSimulator>().StartSimulate(true);
+                    Status.SwitchSimulateMode();
                     SetButtonColor(simulateButton, EnableColor);
                     simulateText.SetText("Reset (6)");
                 }
@@ -239,19 +240,31 @@ namespace GSTestScene
         /// <param name="mode">新的编辑器模式值</param>
         private void OnPlayModeUpdate(Object _, PlayMode mode)
         {
+            //重置物体状态
+            if (mode != PlayMode.Simulate)
+            {
+                gameObject.GetComponent<GaussianSimulator>()?.ResetSimulate();
+            }
             switch (mode)
             {
                 case PlayMode.Select:
                     SetButtonColor(viewButton, DisableColor);
                     SetButtonColor(selectButton, EnableColor);
                     SetButtonColor(editButton, DisableColor);
+                    SetButtonColor(simulateButton,DisableColor);
                     break;
                 case PlayMode.View:
                     SetButtonColor(viewButton, EnableColor);
                     SetButtonColor(selectButton, DisableColor);
                     SetButtonColor(editButton, DisableColor);
+                    SetButtonColor(simulateButton,DisableColor);
                     break;
-
+                case PlayMode.Simulate:
+                    SetButtonColor(viewButton, DisableColor);
+                    SetButtonColor(selectButton, DisableColor);
+                    SetButtonColor(editButton, DisableColor);
+                    SetButtonColor(simulateButton,EnableColor);
+                    break;
                 case PlayMode.None:
                 default:
                     break;

@@ -491,7 +491,6 @@ namespace GSTestScene
                     _ => throw new ArgumentOutOfRangeException(nameof(exitCode), exitCode, null)
                 };
                 MainUIManager.ShowTip(notice);
-                Status.IsEditing = false;
             }
         }
 

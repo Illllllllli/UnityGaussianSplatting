@@ -464,7 +464,11 @@ void CSTranslateSelection(uint3 id : SV_DispatchThreadID)
 }
 
 
-// 将四元数转换为 3x3 旋转矩阵
+/**
+ * 将四元数转换为 3x3 旋转矩阵
+ * @param q 四元数
+ * @return 四元数对应的旋转矩阵
+ */
 float3x3 QuaternionToMatrix(float4 q)
 {
     // 确保四元数已归一化
@@ -623,7 +627,7 @@ void CSScaleSelection(uint3 id : SV_DispatchThreadID)
 
         // 处理GS本体缩放
         uint otherStride = 4 + 12; // 假设 _SplatOther 格式：4字节旋转 + 12字节 scale（3x float）
-        uint scaleOffset = idx * otherStride + 4; // 跳过前4字节（旋转）
+        uint scaleOffset = idx * otherStride + 4; // 跳过前4个字节（旋转）
         float3 scale = asfloat(_SplatOtherMouseDown.Load3(scaleOffset));
         scale *= _SelectionDelta; // 应用缩放因子
         _SplatOther.Store3(scaleOffset, asuint(scale));
