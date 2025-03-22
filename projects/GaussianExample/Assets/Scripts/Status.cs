@@ -11,17 +11,18 @@ using UnityEngine.EventSystems;
 public class Status : MonoBehaviour
 {
     private static Status _containerInstance;
+
     //灵敏度方位旋转
     private static float _rotateSensitivity;
 
     public static float rotateSensitivity =>
-        isInteractive>=0 ? _rotateSensitivity : 0f;
+        isInteractive >= 0 ? _rotateSensitivity : 0f;
 
     //灵敏度方位移动
     private static float _translateSensitivity;
 
     public static float translateSensitivity =>
-        isInteractive>=0 ? _translateSensitivity : 0f;
+        isInteractive >= 0 ? _translateSensitivity : 0f;
 
     // 框选编辑位移/旋转/缩放灵敏度
     public const float EditTranslateSensitivity = 0.01f;
@@ -32,15 +33,18 @@ public class Status : MonoBehaviour
     // 基准/最小/最大FoV
     public const float BaseFoV = 30f;
     public const float CameraFovMin = 10f;
+
     public const float CameraFovMax = 120f;
+
     // 基准鼠标滚动量
     public const float MouseScrollBase = 120f;
-    
+
 
     // 检查当前鼠标状态能否与场景交互
     public static int isInteractive { get; private set; } = 0;
-    // 存储当前是否在正编辑
-    public static bool IsEditing = false;
+
+    // 存储当前是否正在模拟
+    public static bool IsSimulating = true;
 
     //查看器模式改变时触发回调
     public static event EventHandler<PlayMode> PlayModeChanged;
@@ -59,7 +63,6 @@ public class Status : MonoBehaviour
         }
     }
 
-    // note: 当前只有平移功能
     // 编辑模式改变时触发回调
     public static event EventHandler<SelectEditMode> SelectEditModeChanged;
 
@@ -83,16 +86,21 @@ public class Status : MonoBehaviour
 
     public static readonly string SceneFileRootEditor = Path.Join(Application.dataPath, "Resources", SceneFileName);
     public static string SceneFileRootPlayer;
+
     public const string SceneFileSuffixPlayer = ".dat";
+
     // 临时文件夹及临时点云文件
     public const string TemporaryDir = ".tmp";
     public const string TemporaryPlyName = "editing";
 
     // 存储可编辑文件的colmap相关文件的文件夹
     public const string ColmapDir = "colmap";
+
     // 存储编辑时需要用到的点云文件路径
     public const string AssetPlyFileLocalDir = "ply";
+
     public const string AssetPlyFileName = "point_clouds.ply";
+
     // 存储模拟时需要用到的网格文件路径
     public const string AssetMeshFileLocalDir = "mesh";
     public const string AssetMeshFileName = "mesh.txt";
@@ -102,17 +110,17 @@ public class Status : MonoBehaviour
     public const string ScaleFileSuffix = "_oth.bytes";
     public const string ColorFileSuffix = "_col.bytes";
     public const string SHFileSuffix = "_shs.bytes";
-    
+
     // GaussianEditor脚本及conda环境路径
     public const string CondaEnvName = "GaussianEditor";
     public const string EditorFolder = @"\\wsl.localhost\Ubuntu\home\Illli\GaussianEditor";
     public const string PythonScript = "launch.py";
     public const string AddConfigPath = "configs/add.yaml";
     public const string DeleteConfigPath = "configs/del-ctn.yaml";
-    public const string EditCtnConfigPath = "configs/edit-ctn.yaml";// for controlnet
-    public const string EditN2NConfigPath = "configs/edit-n2n.yaml";// for instructpix2pix
+    public const string EditCtnConfigPath = "configs/edit-ctn.yaml"; // for controlnet
+    public const string EditN2NConfigPath = "configs/edit-n2n.yaml"; // for instructpix2pix
     public const string CacheDir = "cache";
-    
+
     // 点云文件更新相关
     public const string PlyUpdateFlag = "[update]";
     public const string EditorPlyUpdateDir = "outputs/temp";
@@ -120,7 +128,7 @@ public class Status : MonoBehaviour
 
     // 刚切换场景时需要加载的GS资产
     public static readonly List<GaussianSplatAsset> GaussianSplatAssets = new();
-    
+
     // 因为有一些UI操作只能在主线程进行，所以这里设置一个主线程任务队列
     private static readonly Queue<Action> ExecutionQueue = new();
 
@@ -136,7 +144,7 @@ public class Status : MonoBehaviour
 
     public static void UpdateIsInteractive(bool value)
     {
-        isInteractive +=value?1:-1;
+        isInteractive += value ? 1 : -1;
     }
 
     public static void SwitchSelectMode()
@@ -149,11 +157,11 @@ public class Status : MonoBehaviour
         playMode = PlayMode.View;
     }
 
-    public static void SwitchSilumateMode()
+    public static void SwitchSimulateMode()
     {
         playMode = PlayMode.Simulate;
     }
-    
+
 
     public static void EndSelectEdit()
     {
@@ -174,7 +182,7 @@ public class Status : MonoBehaviour
     {
         selectEditMode = SelectEditMode.Rotate;
     }
-    
+
     /// <summary>
     ///  在主线程执行任务
     /// </summary>
@@ -200,7 +208,6 @@ public class Status : MonoBehaviour
         }
 
         SceneFileRootPlayer = Path.Join(Application.persistentDataPath, SceneFileName);
-        
     }
 
     /// <summary>
@@ -208,10 +215,27 @@ public class Status : MonoBehaviour
     /// </summary>
     private void OnDestroy()
     {
+        // 清空订阅事件
+        if (PlayModeChanged != null)
+        {
+            foreach (Delegate d in PlayModeChanged.GetInvocationList())
+            {
+                PlayModeChanged -= (EventHandler<PlayMode>)d;
+            }
+        }
+
+        if (SelectEditModeChanged != null)
+        {
+            foreach (Delegate d in SelectEditModeChanged.GetInvocationList())
+            {
+                SelectEditModeChanged -= (EventHandler<SelectEditMode>)d;
+            }
+        }
+
         GaussianSplatAssets.Clear();
-        FileHelper.DeletePath(Path.Join(SceneFileRootPlayer, TemporaryDir),true,out _);
+        FileHelper.DeletePath(Path.Join(SceneFileRootPlayer, TemporaryDir), true, out _);
     }
-    
+
     /// <summary>
     /// 逐项执行主线程任务队列中的任务
     /// </summary>
@@ -294,8 +318,7 @@ internal static class GsTools
             return renderer.editSelectedBounds.center;
         return Vector3.zero;
     }
-    
-    
+
 
     /// <summary>
     /// 根据相机视角，从鼠标位移得到世界坐标位移
@@ -313,5 +336,81 @@ internal static class GsTools
         // 计算位移量
         float moveDistance = screenDelta.magnitude * Status.EditTranslateSensitivity;
         return moveDir * moveDistance;
+    }
+
+    /// <summary>
+    /// 将固定深度上的屏幕坐标转换成世界空间坐标
+    /// </summary>
+    /// <param name="screenPos">屏幕坐标</param>
+    /// <param name="cam">相机</param>
+    /// <param name="referenceDepth">固定深度</param>
+    /// <returns>世界空间坐标</returns>
+    public static Vector3 GetMouseWorldPos(Vector2 screenPos, Camera cam, float referenceDepth)
+    {
+        // 将屏幕坐标转换为NDC坐标
+        Vector3 ndc = new Vector3(
+            2.0f * screenPos.x / Screen.width - 1.0f,
+            2.0f * screenPos.y / Screen.height - 1.0f,
+            referenceDepth // 使用固定深度
+        );
+
+        // 反投影到世界空间
+        Matrix4x4 viewProjMatrix = cam.projectionMatrix * cam.worldToCameraMatrix;
+        Matrix4x4 invViewProj = viewProjMatrix.inverse;
+        Vector4 worldPos = invViewProj.MultiplyPoint(ndc);
+
+        return worldPos / worldPos.w;
+    }
+
+    /// <summary>
+    /// 将屏幕空间是速度转换为世界空间
+    /// </summary>
+    /// <param name="cam">当前相机</param>
+    /// <param name="screenVel">屏幕空间速度</param>
+    /// <param name="depth">固定深度</param>
+    /// <returns>世界空间速度</returns>
+    public static Vector3 ScreenToWorldVelocity(Camera cam, Vector2 screenVel, float depth)
+    {
+        // 获取相机参数
+        float fov = cam.fieldOfView;
+        float tanFov = Mathf.Tan(fov * 0.5f * Mathf.Deg2Rad);
+
+        // 计算每像素对应的世界单位（在参考深度平面）
+        float pixelsPerUnit = Screen.height / (2.0f * depth * tanFov);
+        float worldSpeedScale = 1.0f / pixelsPerUnit;
+
+        // 转换到相机坐标系
+        Vector3 camSpaceVel = new Vector3(
+            screenVel.x * worldSpeedScale,
+            screenVel.y * worldSpeedScale,
+            0
+        );
+
+        // 转换到世界坐标系
+        return cam.transform.TransformVector(camSpaceVel);
+    }
+
+    /// <summary>
+    /// 从四元数生成3x3旋转矩阵
+    /// </summary>
+    /// <param name="q">四元数</param>
+    /// <returns>3x3旋转矩阵</returns>
+    public static Matrix4x4 GenerateRotationMatrix(Quaternion q)
+    {
+        float x = q.x, y = q.y, z = q.z, w = q.w;
+        Matrix4x4 matrix = new Matrix4x4
+        {
+            m00 = 1 - 2 * y * y - 2 * z * z,
+            m01 = 2 * x * y - 2 * z * w,
+            m02 = 2 * x * z + 2 * y * w,
+            m10 = 2 * x * y + 2 * z * w,
+            m11 = 1 - 2 * x * x - 2 * z * z,
+            m12 = 2 * y * z - 2 * x * w,
+            m20 = 2 * x * z - 2 * y * w,
+            m21 = 2 * y * z + 2 * x * w,
+            m22 = 1 - 2 * x * x - 2 * y * y
+        };
+
+        return matrix;
     }
 }
