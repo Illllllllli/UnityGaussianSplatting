@@ -2,16 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using GaussianSplatting.Editor;
+using System.Threading.Tasks;
 using GaussianSplatting.Runtime;
-using GSTestScene.Simulation;
+using StartScene;
 using Unity.Collections;
-using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.Serialization;
+using UnityEngine.Rendering;
 using Debug = UnityEngine.Debug;
-using Object = UnityEngine.Object;
 
 namespace GSTestScene.Simulation
 {
@@ -26,16 +24,22 @@ namespace GSTestScene.Simulation
         private readonly List<GaussianObject> _gaussianObjects = new();
 
         // 针对每个GS物体的物理材质（虽然只有一个）
-        private readonly List<MaterialProperty> _materialProperties=new();
+        private readonly List<MaterialProperty> _materialProperties = new();
 
         [Header("Main Camera")]
         // 主相机
         public Camera mainCamera;
 
 
-        [Header("Simulation Compute Shader")]
+        [Header("Simulation Compute Shaders")]
         // 模拟用计算着色器主体
         public ComputeShader simulateShader;
+
+        // 基数排序用着色器
+        public ComputeShader radixShader;
+
+        // 缓冲区复制用着色器
+        public ComputeShader copyShader;
 
         [Header("Simulation Parameters")]
         // 物理模拟的时间步长
@@ -81,11 +85,20 @@ namespace GSTestScene.Simulation
 
 
         // 下面是内部参数
+        private CommandBuffer _commandBuffer; // 命令缓冲区
+        private ComputeBuffer _lastBuffer; // 标记commandBuffer中最后一个编辑的ComputeBuffer
 
-        private const float ThreadCount = 256; // 线程数量（常数,但是为了配合CeilToInt改成浮点数）
+        private const int InnerBatchCount = 64; // BurstJob线程数量
+
+
+        private const int SimulateBlockSize = 256; // 线程数量（常数,但是为了配合CeilToInt改成浮点数）
+        private const int RadixSortBlockSize = 128; // RadixSort所用线程块大小
+        private const int CopyBlockSize = 1024; // 复制缓冲区所用线程块大小
+        private const int BlellochLogNumBanks = 5; // GPU共享内存的划分数的对数
         private const int PartialAABBCount = 64; // 部分包围盒的固定数量
         private const int MaxCollisionPairs = 1000000; // 最大碰撞对数量
         private int _totalGsCount; // GS总数
+        private int _lbvhSortBufferSize; // LBVH的中间排序结果缓冲区的大小。经过基数排序后才能确定
 
         // 鼠标控制相关参数
         private bool isMousePressed => GetComponent<UserActionListener>().isMousePressed; // 当前鼠标是否按下
@@ -168,19 +181,144 @@ namespace GSTestScene.Simulation
         private ComputeBuffer _globalTetIdxBuffer; //全局四面体索引缓冲区
         private ComputeBuffer _globalTetWBuffer; //全局四面体权重缓冲区
 
+        // GS相关缓冲区。网格插值用,数据类型保留为原始的uint
+        private ComputeBuffer _gsPosBuffer; //GS位置缓冲区
+        private ComputeBuffer _gsOtherBuffer; //GS缩放和旋转缓冲区
+
         // 着色器属性ID
+        // 通用属性
+        private readonly int _gridSizeId = Shader.PropertyToID("grid_size");
+
+        // copyShader
+        private readonly int _copySrcBufferId = Shader.PropertyToID("copy_src_buffer");
+        private readonly int _copyDstBufferId = Shader.PropertyToID("copy_dst_buffer");
+        private readonly int _copySrcOffsetId = Shader.PropertyToID("copy_src_offset");
+        private readonly int _copyDstOffsetId = Shader.PropertyToID("copy_dst_offset");
+        private readonly int _copyElementSizeId = Shader.PropertyToID("copy_element_size");
+        private readonly int _copyLengthId = Shader.PropertyToID("copy_length");
+
+        // radixSortShader
+        private readonly int _sortLocalSharedMemorySizeId = Shader.PropertyToID("sort_local_shared_memory_size");
+        private readonly int _prefixSumsOffsetId = Shader.PropertyToID("prefix_sums_offset");
+        private readonly int _blockSumsOffsetId = Shader.PropertyToID("block_sums_offset");
+        private readonly int _scanBlockSumsOffsetId = Shader.PropertyToID("scan_block_sum_offset");
+        private readonly int _radixShiftWidthId = Shader.PropertyToID("radix_shift_width");
+        private readonly int _radixKeyInLengthId = Shader.PropertyToID("radix_key_in_length");
+        private readonly int _radixKeyInId = Shader.PropertyToID("radix_key_in");
+        private readonly int _radixKeyOutId = Shader.PropertyToID("radix_key_out");
+        private readonly int _radixValueInId = Shader.PropertyToID("radix_value_in");
+        private readonly int _radixValueOutId = Shader.PropertyToID("radix_value_out");
+
+        private readonly int _preScanSharedDataSizeId = Shader.PropertyToID("pre_scan_shared_data_size");
+        private readonly int _radixTempBufferId = Shader.PropertyToID("radix_temp_buffer");
+        private readonly int _blellochOutBufferOffsetId = Shader.PropertyToID("blelloch_out_buffer_offset");
+        private readonly int _blellochInBufferOffsetId = Shader.PropertyToID("blelloch_in_buffer_offset");
+
+        private readonly int _blellochBlockSumsBufferOffsetId =
+            Shader.PropertyToID("blelloch_block_sums_buffer_offset");
+
+        private readonly int _blellochLengthId = Shader.PropertyToID("blelloch_length");
+
+        // simulateShader
+
+        //控制器
         private readonly int _controllerPositionId = Shader.PropertyToID("controller_position");
         private readonly int _controllerVelocityId = Shader.PropertyToID("controller_velocity");
-        private readonly int _controllerAngleVelocity = Shader.PropertyToID("controller_angle_velocity");
+        private readonly int _controllerAngleVelocityId = Shader.PropertyToID("controller_angle_velocity");
         private readonly int _controllerRadiusId = Shader.PropertyToID("controller_radius");
-        private readonly int _vertXBufferId = Shader.PropertyToID("vertices_X");
-        private readonly int _vertxBufferId = Shader.PropertyToID("vertices_x");
-        private readonly int _vertSelectedIndicesBufferId = Shader.PropertyToID("selected_vertices_ids");
+
+        //GS
+        private readonly int _gsTotalCountId = Shader.PropertyToID("gs_total_count");
+
+        private readonly int _gsPositionBufferId = Shader.PropertyToID("gs_position_buffer");
+        private readonly int _gsOtherBufferId = Shader.PropertyToID("gs_other_buffer");
+
+        private readonly int _gsLocalCountId = Shader.PropertyToID("gs_local_count");
+        private readonly int _gsLocalOffsetId = Shader.PropertyToID("gs_local_offset");
+
+        //网格
+        private readonly int _verticesTotalCountId = Shader.PropertyToID("vertices_total_count");
+        private readonly int _cellTotalCountId = Shader.PropertyToID("cell_total_count");
+        private readonly int _boundaryId = Shader.PropertyToID("boundary");
+
+        private readonly int _vertxBufferId = Shader.PropertyToID("vertices_x_buffer");
+        private readonly int _vertXBufferId = Shader.PropertyToID("vertices_X_buffer");
+        private readonly int _vertGroupBufferId = Shader.PropertyToID("vert_group_buffer");
+
+        private readonly int _edgeIndicesBufferId = Shader.PropertyToID("edge_indices_buffer");
+        private readonly int _faceIndicesBufferId = Shader.PropertyToID("face_indices_buffer");
+        private readonly int _cellIndicesBufferId = Shader.PropertyToID("cell_indices_buffer");
+
+        private readonly int _vertForceBufferId = Shader.PropertyToID("vert_force_buffer");
+        private readonly int _vertMassBufferId = Shader.PropertyToID("vert_mass_buffer");
+        private readonly int _vertInvMassBufferId = Shader.PropertyToID("vert_inv_mass_buffer");
+        private readonly int _vertNewXBufferId = Shader.PropertyToID("vert_new_x_buffer");
+        private readonly int _vertDeltaPosBufferId = Shader.PropertyToID("vert_delta_pos_buffer");
+        private readonly int _vertSelectedIndicesBufferId = Shader.PropertyToID("vert_selected_indices_buffer");
+        private readonly int _rigidVertGroupBufferId = Shader.PropertyToID("rigid_vert_group_buffer");
+        private readonly int _cellMultiplierBufferId = Shader.PropertyToID("cell_multiplier_buffer");
+        private readonly int _cellDsInvBufferId = Shader.PropertyToID("cell_ds_inv_buffer");
+        private readonly int _cellVolumeInitBufferId = Shader.PropertyToID("cell_volume_init_buffer");
+        private readonly int _cellDensityBufferId = Shader.PropertyToID("cell_density_buffer");
+        private readonly int _cellMuBufferId = Shader.PropertyToID("cell_mu_buffer");
+        private readonly int _cellLambdaBufferId = Shader.PropertyToID("cell_lambda_buffer");
+
+        private readonly int _rigidMassBufferId = Shader.PropertyToID("rigid_mass_buffer");
+        private readonly int _rigidMassCenterInitBufferId = Shader.PropertyToID("rigid_mass_center_init_buffer");
+        private readonly int _rigidMassCenterBufferId = Shader.PropertyToID("rigid_mass_center_buffer");
+
+        private readonly int _rigidAngleVelocityMatrixBufferId =
+            Shader.PropertyToID("rigid_angle_velocity_matrix_buffer");
+
+        private readonly int _rigidRotationMatrixBufferId = Shader.PropertyToID("rigid_rotation_matrix_buffer");
+
+        private readonly int _triangleAabbsBufferId = Shader.PropertyToID("triangle_aabbs_buffer");
+        private readonly int _sortedTriangleAabbsBufferId = Shader.PropertyToID("sorted_triangle_aabbs_buffer");
+        private readonly int _partialAabbBufferId = Shader.PropertyToID("partial_aabb_buffer");
+        private readonly int _mortonCodeBufferId = Shader.PropertyToID("morton_code_buffer");
+        private readonly int _sortedMortonCodeBufferId = Shader.PropertyToID("sorted_morton_code_buffer");
+        private readonly int _indicesBufferId = Shader.PropertyToID("indices_buffer");
+        private readonly int _sortedIndicesBufferId = Shader.PropertyToID("sorted_indices_buffer");
+        private readonly int _faceFlagsBufferId = Shader.PropertyToID("face_flags_buffer");
+        private readonly int _lbvhAabbsBufferId = Shader.PropertyToID("lbvh_aabbs_buffer");
+        private readonly int _lbvhNodesBufferId = Shader.PropertyToID("lbvh_nodes_buffer");
+        private readonly int _lbvhSortBufferId = Shader.PropertyToID("lbvh_sort_buffer");
+
+        private readonly int _collisionPairsBufferId = Shader.PropertyToID("collision_pairs_buffer");
+        private readonly int _exactCollisionPairsBufferId = Shader.PropertyToID("exact_collision_pairs_buffer");
+        private readonly int _totalPairsBufferId = Shader.PropertyToID("total_pairs_buffer");
+        private readonly int _totalExactPairsBufferId = Shader.PropertyToID("total_exact_pairs_buffer");
+
+        private readonly int _covBufferId = Shader.PropertyToID("cov_buffer");
+        private readonly int _localTetXBufferId = Shader.PropertyToID("local_tet_x_buffer");
+        private readonly int _localTetWBufferId = Shader.PropertyToID("local_tet_w_buffer");
+        private readonly int _globalTetIdxBufferId = Shader.PropertyToID("global_tet_idx_buffer");
+        private readonly int _globalTetWBufferId = Shader.PropertyToID("global_tet_w_buffer");
+
+        private readonly int _cellLocalCountId = Shader.PropertyToID("cell_local_count");
+        private readonly int _cellLocalOffsetId = Shader.PropertyToID("cell_local_offset");
 
         // 内核函数的索引
-        private int selectVerticesKernel => simulateShader.FindKernel("select_vertices");
 
-        private int cleanSelectionKernel => simulateShader.FindKernel("clean_selected_vertices");
+        // copyShader
+        private int copyBufferKernel => copyShader.FindKernel("copy_buffer");
+
+        // radixSortShader
+        private int radixSortLocalKernel => radixShader.FindKernel("radix_sort_local");
+        private int radixGlobalShuffleKernel => radixShader.FindKernel("radix_global_shuffle");
+        private int blellochPreScanKernel => radixShader.FindKernel("radix_blelloch_pre_scan");
+
+        private int blellochAddBlockSumsKernel => radixShader.FindKernel("radix_blelloch_add_block_sums");
+
+        // simulateShader
+        private int selectVerticesKernel => simulateShader.FindKernel("select_vertices"); //更新控制器选择顶点
+        private int cleanSelectionKernel => simulateShader.FindKernel("clean_selected_vertices"); //清除控制器选择顶点
+        private int initializeCovarianceKernel => simulateShader.FindKernel("initialize_covariance"); //初始化协方差矩阵
+        private int getLocalEmbededTetsKernel => simulateShader.FindKernel("get_local_embeded_tets"); //获取GS局部嵌入网格
+        private int getGlobalEmbededTetKernel => simulateShader.FindKernel("get_global_embeded_tet"); //获取GS局部嵌入网格
+        private int initFemBasesKernel => simulateShader.FindKernel("init_fem_bases");
+        private int initInvMassKernel => simulateShader.FindKernel("init_inv_mass");
+        private int initRigidKernel => simulateShader.FindKernel("init_rigid");
 
         // 其他默认参数
         private const int ShDegree = 3; //sh阶数
@@ -231,66 +369,6 @@ namespace GSTestScene.Simulation
 
 
         /// <summary>
-        /// 清除所有缓冲区
-        /// </summary>
-        private void Dispose()
-        {
-            // todo:补全所有缓冲区
-            _vertxBuffer?.Dispose();
-            _vertXBuffer?.Dispose();
-            _vertGroupBuffer?.Dispose();
-
-            _edgeIndicesBuffer?.Dispose();
-            _faceIndicesBuffer?.Dispose();
-            _cellIndicesBuffer?.Dispose();
-
-            _vertVelocityBuffer?.Dispose();
-            _vertForceBuffer?.Dispose();
-            _vertMassBuffer?.Dispose();
-            _vertInvMassBuffer?.Dispose();
-            _vertNewXBuffer?.Dispose();
-            _vertDeltaPosBuffer?.Dispose();
-            _vertSelectedIndicesBuffer?.Dispose();
-            _rigidVertGroupBuffer?.Dispose();
-            _cellMultiplierBuffer?.Dispose();
-            _cellDsInvBuffer?.Dispose();
-            _cellVolumeInitBuffer?.Dispose();
-            _cellDensityBuffer?.Dispose();
-            _cellMuBuffer?.Dispose();
-            _cellLambdaBuffer?.Dispose();
-
-            _rigidMassBuffer?.Dispose();
-            _rigidMassCenterInitBuffer?.Dispose();
-            _rigidMassCenterBuffer?.Dispose();
-            _rigidAngleVelocityMatrixBuffer?.Dispose();
-            _rigidRotationMatrixBuffer?.Dispose();
-
-            _triangleAabbsBuffer?.Dispose();
-            _sortedTriangleAabbsBuffer?.Dispose();
-            _partialAabbBuffer?.Dispose();
-            _partialAabbData.Dispose();
-            _mortonCodeBuffer?.Dispose();
-            _sortedMortonCodeBuffer?.Dispose();
-            _indicesBuffer?.Dispose();
-            _sortedIndicesBuffer?.Dispose();
-            _faceFlagsBuffer?.Dispose();
-            _lbvhAabbsBuffer?.Dispose();
-            _lbvhNodesBuffer?.Dispose();
-            _lbvhSortBuffer?.Dispose();
-
-            _collisionPairsBuffer?.Dispose();
-            _exactCollisionPairsBuffer?.Dispose();
-            _totalPairsBuffer?.Dispose();
-            _totalExactPairsBuffer?.Dispose();
-
-            _covBuffer?.Dispose();
-            _localTetXBuffer?.Dispose();
-            _localTetWBuffer?.Dispose();
-            _globalTetIdxBuffer?.Dispose();
-            _globalTetWBuffer?.Dispose();
-        }
-
-        /// <summary>
         /// 开启/继续物理模拟
         /// </summary>
         /// <param name="init">是否需要初始化</param>
@@ -323,13 +401,20 @@ namespace GSTestScene.Simulation
 
                 // 初始化每个物体的参数和公共参数
                 GameObject tip = MainUIManager.ShowTip("Preparing for simulation...", false);
-                bool initialize = InitializeSimulationParams();
+                tip.GetComponent<TipsManager>().SetButtonInteractable(false);
+                bool success = InitializeSimulationParams();
+                if (!success)
+                {
+                    MainUIManager.ShowTip("Something went wrong, please check your asset file.");
+                    return;
+                }
+
                 Destroy(tip);
-                if (!initialize) return;
                 // 统计初始化时间
                 initializeMilliSeconds = timerUtil.GetDeltaTime();
             }
 
+            MainUIManager.ShowTip("Press 'Space' to pause the process of simulation");
             Status.IsSimulating = true;
         }
 
@@ -354,6 +439,7 @@ namespace GSTestScene.Simulation
             totalSteps = 0;
             initializeMilliSeconds = 0;
             totalSimulateMilliSeconds = 0;
+            _lbvhSortBufferSize = 0;
             _totalGsCount = 0;
             _totalVerticesCount = 0;
             _totalEdgesCount = 0;
@@ -375,6 +461,7 @@ namespace GSTestScene.Simulation
 
         void Start()
         {
+            _commandBuffer = new CommandBuffer { name = "Command Buffer" };
         }
 
         // Update is called once per frame
@@ -421,7 +508,6 @@ namespace GSTestScene.Simulation
         }
     }
 }
-
 
 
 /// <summary>

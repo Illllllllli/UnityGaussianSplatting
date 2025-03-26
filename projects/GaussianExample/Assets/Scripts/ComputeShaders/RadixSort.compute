@@ -1,0 +1,311 @@
+// 用于基数排序的计算着色器
+#pragma kernel radix_sort_local
+#pragma kernel radix_global_shuffle
+#pragma kernel radix_blelloch_pre_scan
+#pragma kernel radix_blelloch_add_block_sums
+
+#define BLOCK_SIZE 128
+const int max_element_per_block = BLOCK_SIZE;
+const int log_num_banks = 5;
+
+// 线程网格大小
+int grid_size;
+// 共享内存大小以uint计
+int sort_local_shared_memory_size;
+// 参数
+int radix_shift_width;
+int radix_key_in_length;
+
+//sort_buffer各个分区的偏移量
+int prefix_sums_offset;
+int block_sums_offset;
+int scan_block_sums_offset;
+RWStructuredBuffer<uint2> radix_key_in;
+RWStructuredBuffer<uint2> radix_key_out;
+RWStructuredBuffer<int> radix_value_in;
+RWStructuredBuffer<int> radix_value_out;
+// tempBuffer
+RWStructuredBuffer<uint> radix_temp_buffer;
+
+// 组内共享内存(local sort用)
+groupshared uint2 s_data[BLOCK_SIZE];
+groupshared int s_v_data[BLOCK_SIZE];
+groupshared uint s_mask_out[BLOCK_SIZE + 1]; // 128元素+1边界
+groupshared uint s_merged_scan[BLOCK_SIZE];
+groupshared uint s_mask_sums[4];
+groupshared uint s_scan_mask_out_sums[4];
+
+
+/**
+ * 从ulong->uint2的键中按位移宽度抽取两位
+ * 这边先假设是小端存储
+ * 12345678-> 8765,4321 -> 5678,1234
+ * @param key uint2类型存储的键
+ * @param shift 位移宽度
+ * @return 抽取的两位
+ */
+inline uint extract2_bit(uint2 key, const uint shift)
+{
+    if (shift < 32 - 2)
+    {
+        return (key.x >> shift) & 3;
+    }
+    return (key.y >> (shift - 32)) & 3;
+}
+
+[numthreads(BLOCK_SIZE,1,1)]
+void radix_sort_local(uint3 gid : SV_GroupID, uint3 g_tid : SV_GroupThreadID)
+{
+    const int thread_id = g_tid.x;
+    const int global_id = gid.x * BLOCK_SIZE + thread_id;
+    // 复制输入数据到共享内存
+    if (global_id < radix_key_in_length)
+    {
+        s_data[thread_id] = radix_key_in[global_id];
+        s_v_data[thread_id] = radix_value_in[global_id];
+    }
+    else
+    {
+        s_data[thread_id] = 0;
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+
+    // 存储当前线程对应的原始数据
+    // 处理64位键
+    const uint2 current_key = s_data[thread_id];
+    const int current_value = s_v_data[thread_id];
+    const uint radix_bits = extract2_bit(current_key, radix_shift_width);
+
+    for (uint bucket = 0; bucket < 4; ++bucket)
+    {
+        // 初始化掩码
+        s_mask_out[thread_id] = (global_id < radix_key_in_length && radix_bits == bucket) ? 1 : 0;
+        //边界清零
+        if (thread_id == 0)
+        {
+            s_mask_out[BLOCK_SIZE] = 0;
+        }
+        GroupMemoryBarrierWithGroupSync();
+
+        // Hillis-Steele前缀扫描
+        for (uint stride = 1; stride < BLOCK_SIZE; stride *= 2)
+        {
+            int partner = thread_id - stride;
+            int sum;
+            if (partner >= 0)
+            {
+                sum = s_mask_out[thread_id] + s_mask_out[partner];
+            }
+            else
+            {
+                sum = s_mask_out[thread_id];
+            }
+            GroupMemoryBarrierWithGroupSync();
+            s_mask_out[thread_id] = sum;
+            GroupMemoryBarrierWithGroupSync();
+        }
+        //进行元素偏移
+        const uint current_mask_value = s_mask_out[thread_id];
+        GroupMemoryBarrierWithGroupSync();
+        s_mask_out[thread_id + 1] = current_mask_value;
+        GroupMemoryBarrierWithGroupSync();
+
+        if (thread_id == 0)
+        {
+            s_mask_out[0] = 0;
+            const uint total_sum = s_mask_out[BLOCK_SIZE];
+            s_mask_sums[bucket] = total_sum;
+            radix_temp_buffer[block_sums_offset + bucket * grid_size + gid.x] = total_sum;
+        }
+        GroupMemoryBarrierWithGroupSync();
+
+        if (radix_bits == bucket && global_id < radix_key_in_length)
+        {
+            s_merged_scan[thread_id] = s_mask_out[thread_id];
+        }
+
+        GroupMemoryBarrierWithGroupSync();
+    }
+
+    if (thread_id == 0)
+    {
+        uint run_sum = 0;
+        for (uint bucket = 0; bucket < 4; ++bucket)
+        {
+            s_scan_mask_out_sums[bucket] = run_sum;
+            run_sum += s_mask_sums[bucket];
+        }
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+    // 避免在分支中出现同步语句
+    uint new_pos = 0, prefix_sum = 0;
+    if (global_id < radix_key_in_length)
+    {
+        // 计算输入元素的新位置
+        prefix_sum = s_merged_scan[thread_id];
+        new_pos = prefix_sum + s_scan_mask_out_sums[radix_bits];
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (global_id < radix_key_in_length)
+    {
+        // 打乱线程块的输入(?)
+        s_data[new_pos] = current_key;
+        s_v_data[new_pos] = current_value;
+        s_merged_scan[new_pos] = prefix_sum;
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (global_id < radix_key_in_length)
+    {
+        // 复制结果到全局内存中
+        radix_temp_buffer[prefix_sums_offset + global_id] = s_merged_scan[thread_id];
+        radix_key_out[global_id] = s_data[thread_id];
+        radix_value_out[global_id] = s_v_data[thread_id];
+    }
+}
+
+
+[numthreads(BLOCK_SIZE,1,1)]
+void radix_global_shuffle(uint3 gid : SV_GroupID, uint3 g_tid : SV_GroupThreadID)
+{
+    const int thread_id = g_tid.x;
+    const int global_id = gid.x * BLOCK_SIZE + thread_id;
+
+    if (global_id < radix_key_in_length)
+    {
+        uint2 current_key = radix_key_in[global_id];
+        int current_value = radix_value_in[global_id];
+        uint radix_bits = extract2_bit(current_key, radix_shift_width);
+        uint prefix_sum = radix_temp_buffer[prefix_sums_offset + global_id];
+        uint data_global_position = radix_temp_buffer[scan_block_sums_offset + radix_bits * grid_size + gid.x] +
+            prefix_sum;
+        GroupMemoryBarrierWithGroupSync();
+        radix_key_out[data_global_position] = current_key;
+        radix_value_out[data_global_position] = current_value;
+    }
+}
+
+
+// 共享内存大小以uint计
+int pre_scan_shared_data_size;
+groupshared uint pre_scan_shared_data[512];
+// tempBuffer在上面
+// tempBuffer各个分区的偏移量
+int blelloch_out_buffer_offset;
+int blelloch_in_buffer_offset;
+int blelloch_block_sums_buffer_offset;
+int blelloch_length;
+
+
+inline uint conflict_free_offset(const uint n)
+{
+    return n >> log_num_banks;
+}
+
+inline uint get_shared_index(const uint n)
+{
+    return n + conflict_free_offset(n);
+}
+
+[numthreads(BLOCK_SIZE/2,1,1)]
+void radix_blelloch_pre_scan(uint3 gid : SV_GroupID, uint3 g_tid : SV_GroupThreadID)
+{
+    const int thread_id = g_tid.x;
+    const int block_id = gid.x;
+    const int block_dim = BLOCK_SIZE / 2;
+    const int global_id = max_element_per_block * block_id + thread_id;
+    // 初始化共享内存
+    pre_scan_shared_data[thread_id] = 0;
+    pre_scan_shared_data[thread_id + block_dim] = 0;
+    pre_scan_shared_data[thread_id + get_shared_index(block_dim)] = 0;
+
+    GroupMemoryBarrierWithGroupSync();
+
+    // 复制全局数据到共享内存
+    if (global_id < blelloch_length)
+    {
+        pre_scan_shared_data[get_shared_index(thread_id)] = radix_temp_buffer[blelloch_in_buffer_offset + global_id];
+        if (global_id + block_dim < blelloch_length)
+        {
+            pre_scan_shared_data[get_shared_index(thread_id + block_dim)] = radix_temp_buffer[blelloch_in_buffer_offset
+                + global_id + block_dim];
+        }
+    }
+
+    // Upsweep
+    int offset = 1;
+    for (int d = max_element_per_block >> 1; d > 0; d >>= 1)
+    {
+        GroupMemoryBarrierWithGroupSync();
+        if (thread_id < d)
+        {
+            int ai = offset * ((thread_id << 1) + 1) - 1;
+            int bi = offset * ((thread_id << 1) + 2) - 1;
+            ai += conflict_free_offset(ai);
+            bi += conflict_free_offset(bi);
+
+            pre_scan_shared_data[bi] += pre_scan_shared_data[ai];
+        }
+        offset <<= 1;
+    }
+
+    // 保存总和在全局数据中并清除共享内存的最后一个元素
+    if (thread_id == 0)
+    {
+        radix_temp_buffer[blelloch_block_sums_buffer_offset] = pre_scan_shared_data[get_shared_index(
+            max_element_per_block - 1)];
+        pre_scan_shared_data[get_shared_index(max_element_per_block - 1)] = 0;
+    }
+
+    // Downsweep
+    for (int d = 1; d < max_element_per_block; d <<= 1)
+    {
+        offset >>= 1;
+        GroupMemoryBarrierWithGroupSync();
+
+        if (thread_id < d)
+        {
+            int ai = offset * ((thread_id << 1) + 1) - 1;
+            int bi = offset * ((thread_id << 1) + 2) - 1;
+            ai += conflict_free_offset(ai);
+            bi += conflict_free_offset(bi);
+
+            const uint temp = pre_scan_shared_data[ai];
+            pre_scan_shared_data[ai] = pre_scan_shared_data[bi];
+            pre_scan_shared_data[bi] += temp;
+        }
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+    // 复制数据到全局内存
+    if (global_id < blelloch_length)
+    {
+        radix_temp_buffer[blelloch_out_buffer_offset + global_id] = pre_scan_shared_data[get_shared_index(thread_id)];
+        if (global_id + block_dim < blelloch_length)
+        {
+            radix_temp_buffer[blelloch_out_buffer_offset + global_id + block_dim] = pre_scan_shared_data[
+                get_shared_index(thread_id + block_dim)];
+        }
+    }
+}
+
+[numthreads(BLOCK_SIZE/2,1,1)]
+void radix_blelloch_add_block_sums(uint3 gid : SV_GroupID, uint3 g_tid : SV_GroupThreadID)
+{
+    const int thread_id = g_tid.x;
+    const int block_id = gid.x;
+    const int block_dim = BLOCK_SIZE / 2;
+    const int global_id = max_element_per_block * block_id + thread_id;
+    const uint block_sum = radix_temp_buffer[blelloch_block_sums_buffer_offset + block_id];
+    if (global_id < blelloch_length)
+    {
+        radix_temp_buffer[blelloch_out_buffer_offset + global_id] = radix_temp_buffer[blelloch_in_buffer_offset +
+            global_id] + block_sum;
+        if (global_id + block_dim < blelloch_length)
+        {
+            radix_temp_buffer[blelloch_out_buffer_offset + global_id + block_dim] = radix_temp_buffer[
+                blelloch_in_buffer_offset + global_id + block_dim] + block_sum;
+        }
+    }
+}

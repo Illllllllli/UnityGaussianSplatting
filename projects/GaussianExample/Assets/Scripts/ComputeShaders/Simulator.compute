@@ -1,80 +1,91 @@
-﻿// 用于物理模拟计算
+﻿#pragma once
+// 用于物理模拟计算
 #pragma kernel select_vertices
 #pragma kernel clean_selected_vertices
+#pragma kernel initialize_covariance
+#pragma kernel get_local_embeded_tets
+#pragma kernel get_global_embeded_tet
+#pragma kernel init_fem_bases
+#pragma kernel init_inv_mass
+#pragma kernel init_rigid
+
+#include "MathUtils.hlsl"
+#include "SimulateUtils.hlsl"
+
+//预定义量
+
+
+#define BLOCK_SIZE 256
+#define PI 3.1415926
 
 // 输入数据
 
+// 控制器参数
 float3 controller_position; //控制器的位置
 float3 controller_velocity; //控制器的速度
 float3 controller_angle_velocity; //控制器的角速度
 float controller_radius; //控制器影响半径
 
+// 全局GS参数
+int gs_total_count; // GS数量
+// GS缓冲区参数
+RWStructuredBuffer<uint3> gs_position_buffer; //gs位置数据
+RWStructuredBuffer<uint> gs_other_buffer; //gs缩放和旋转数据
 
-RWStructuredBuffer<float3> vertices_x; //一级顶点数据（所有顶点）
-RWStructuredBuffer<float3> vertices_X; //二级顶点数据（部分顶点）
-
-RWStructuredBuffer<int> selected_vertices_ids; //被选中的顶点的索引列表（1为被选中）
-
-
-/**
- * 将四元数转换为 3x3 旋转矩阵
- * @param q 四元数
- * @return 四元数对应的旋转矩阵
- */
-float3x3 quaternion_to_matrix(float4 q)
-{
-    // 确保四元数已归一化
-    q = normalize(q);
-
-    float x = q.x;
-    float y = q.y;
-    float z = q.z;
-    float w = q.w;
-
-    float x2 = x + x;
-    float y2 = y + y;
-    float z2 = z + z;
-    float xx = x * x2;
-    float xy = x * y2;
-    float xz = x * z2;
-    float yy = y * y2;
-    float yz = y * z2;
-    float zz = z * z2;
-    float wx = w * x2;
-    float wy = w * y2;
-    float wz = w * z2;
-
-    float3x3 m;
-    m._m00 = 1.0 - (yy + zz);
-    m._m01 = xy - wz;
-    m._m02 = xz + wy;
-
-    m._m10 = xy + wz;
-    m._m11 = 1.0 - (xx + zz);
-    m._m12 = yz - wx;
-
-    m._m20 = xz - wy;
-    m._m21 = yz + wx;
-    m._m22 = 1.0 - (xx + yy);
-
-    return m;
-}
+// 局部(单物体)GS参数
+int gs_local_count;
+int gs_local_offset;
 
 
+// 全局网格参数
+int vertices_total_count;
+int cell_total_count;
+int boundary;
+// 网格缓冲区参数
+RWStructuredBuffer<float3> vertices_x_buffer; //二级顶点数据（部分顶点）(?)
+RWStructuredBuffer<float3> vertices_X_buffer; //一级顶点数据（所有顶点）(?)
+RWStructuredBuffer<int> vert_group_buffer; // 顶点组数据
+
+RWStructuredBuffer<int> edge_indices_buffer; // 边索引
+RWStructuredBuffer<int> face_indices_buffer; // 面索引
+RWStructuredBuffer<int> cell_indices_buffer; // 四面体索引
+
+RWStructuredBuffer<float> vert_mass_buffer; //顶点质量
+RWStructuredBuffer<float> vert_inv_mass_buffer; //顶点逆质量
+RWStructuredBuffer<int> vert_selected_indices; //被选中的顶点的索引列表（1为被选中）
+RWStructuredBuffer<int> rigid_vert_group_buffer; //刚体组索引
+RWStructuredBuffer<float> cell_ds_inv_buffer; // 逆变形梯度矩阵
+RWStructuredBuffer<float> cell_volume_init_buffer; //四面体初始体积
+RWStructuredBuffer<float> cell_density_buffer; // 四面体密度
+
+
+RWStructuredBuffer<float> cov_buffer; //协方差矩阵
+RWStructuredBuffer<float> local_tet_x_buffer; //本地四面体顶点坐标缓冲区
+RWStructuredBuffer<float> local_tet_w_buffer; //本地四面体顶点坐标权重缓冲区
+RWStructuredBuffer<int> global_tet_idx_buffer; //全局四面体顶点坐标索引缓冲区
+RWStructuredBuffer<float> global_tet_w_buffer; //全局四面体顶点坐标权重缓冲区
+
+RWStructuredBuffer<double> rigid_mass_buffer; //刚体质量
+RWStructuredBuffer<double> rigid_mass_center_init_buffer; //刚体初始质心
+RWStructuredBuffer<double> rigid_mass_center_buffer; //刚体质心
+
+// 局部(单物体)网格参数
+int cell_local_count;
+int cell_local_offset;
 /**
  * 根据控制器位置更新选定的顶点
  * @param id 线程ID
  */
-[numthreads(256,1,1)]
+[numthreads(BLOCK_SIZE,1,1)]
 void select_vertices(uint3 id : SV_DispatchThreadID)
 {
     const uint idx = id.x;
-    const float3 pos = vertices_x[idx];
+    const float3 pos = vertices_x_buffer[idx];
     const float dist = distance(pos, controller_position);
 
     if (dist <= controller_radius)
     {
-        selected_vertices_ids[idx] |= 1; // 使用最低位表示选中状态
+        vert_selected_indices[idx] |= 1; // 使用最低位表示选中状态
     }
 }
 
@@ -82,9 +93,210 @@ void select_vertices(uint3 id : SV_DispatchThreadID)
  * 清除选定的顶点
  * @param id 线程ID
  */
-[numthreads(256,1,1)]
+[numthreads(BLOCK_SIZE,1,1)]
 void clean_selected_vertices(uint3 id : SV_DispatchThreadID)
 {
     const uint idx = id.x;
-    selected_vertices_ids[idx] &= ~1; // 清除最低位
+    vert_selected_indices[idx] &= ~1; // 清除最低位
+}
+
+/**
+ * 初始化协方差矩阵
+ * @param id 线程ID
+ */
+[numthreads(BLOCK_SIZE,1,1)]
+void initialize_covariance(uint3 id : SV_DispatchThreadID)
+{
+    const int idx = id.x;
+    if (idx < gs_total_count)
+    {
+        const float3 scale = load_gs_scale(gs_other_buffer, idx);
+        const float4 rotation = load_gs_rotation(gs_other_buffer, idx);
+        const float3x3 s = build_scaling_matrix(scale);
+        const float3x3 r = build_rotation_matrix(rotation);
+        const float3x3 l = mul(r, s);
+        const float3x3 lt = transpose(l);
+        const float3x3 cov = mul(l, lt);
+        store_matrix_float(cov, cov_buffer, idx);
+    }
+}
+
+/**
+ * 获取GS全局嵌入四面体
+ * @param id 线程ID
+ */
+[numthreads(BLOCK_SIZE,1,1)]
+void get_local_embeded_tets(uint3 id : SV_DispatchThreadID)
+{
+    const int idx = id.x;
+    if (idx < gs_total_count)
+    {
+        const float fac = 1.5f;
+        const float3 center = load_gs_pos(gs_position_buffer, idx);
+
+        // 协方差矩阵的特征分解
+        float eval[3];
+        float evec[3][3];
+
+        float A[3][3];
+        copy_matrix_to_array3x3(load_matrix_float(cov_buffer, idx), A);
+        get_sym_eigen3x3(A, eval, evec);
+        const float3 sqrt_eval = sqrt(copy_array_to_vector3(eval));
+
+        // 确定最大（mxV）、最小（mnV）和中间（mdV）特征值的索引
+        const int max_v = eval[0] > max(eval[1], eval[2]) ? 0 : (eval[1] > max(eval[0], eval[2]) ? 1 : 2);
+        const int min_v = eval[0] < min(eval[1], eval[2]) ? 0 : (eval[1] < min(eval[0], eval[2]) ? 1 : 2);
+        const int mid_v = 3 ^ (max_v ^ min_v);
+
+        float x0[3];
+        // 顶点0：沿最大特征方向拉伸
+        // 顶点1-3：在中间特征方向平面内按120°分布
+        for (int i = 0; i < 3; i++)
+        {
+            local_tet_x_buffer[(idx * 4 + 0) * 3 + i] = center[i] + sqrt_eval[max_v] * evec[i][max_v] * fac;
+            x0[i] = center[i] - sqrt_eval[max_v] * evec[i][max_v];
+        }
+        const float3 n = normalize(float3(evec[0][max_v], evec[1][max_v], evec[2][max_v])); // 主方向单位向量
+        const float3 n_t = normalize(float3(evec[0][mid_v], evec[1][mid_v], evec[2][mid_v])); // 中间方向单位向量
+        // 计算正交向量u和v
+        const float3 u = cross(n, n_t);
+        const float3 v = cross(n, u);
+        const float r = sqrt_eval[mid_v];
+
+        for (int i = 0; i < 3; i++)
+        {
+            // 生成三个环绕点（角度0°, 120°, -120°）
+            //每行对应一个顶点
+            local_tet_x_buffer[(idx * 4 + 1) * 3 + i] = x0[i] + r * (cos(0) * u[i] + sin(0) * v[i]) * fac;
+            local_tet_x_buffer[(idx * 4 + 2) * 3 + i] = x0[i] + r * (cos(+2.f / 3.f * PI) * u[i] + sin(+2.f / 3.f * PI)
+                * v[i]) * fac;
+            local_tet_x_buffer[(idx * 4 + 3) * 3 + i] = x0[i] + r * (cos(-2.f / 3.f * PI) * u[i] + sin(-2.f / 3.f * PI)
+                * v[i]) * fac;
+        }
+        // 计算插值权重
+        // 构造Ds_local矩阵（顶点0-3相对于顶点3的坐标差）
+        float ds_local[3][3];
+        for (int i = 0; i < 3; i++)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                ds_local[i][j] = local_tet_x_buffer[(idx * 4 + j) * 3 + i] - local_tet_x_buffer[(idx * 4 + 3) * 3 + i];
+            }
+        }
+        // 求逆矩阵
+        const float3x3 ds_local_inv = inverse_3x3(ds_local);
+        // 计算中心点与顶点3的坐标差
+        float3 d_xyz = center;
+        d_xyz.x -= local_tet_x_buffer[(idx * 4 + 3) * 3 + 0];
+        d_xyz.y -= local_tet_x_buffer[(idx * 4 + 3) * 3 + 1];
+        d_xyz.z -= local_tet_x_buffer[(idx * 4 + 3) * 3 + 2];
+        // 通过逆矩阵变换得到权重并保存到全局数据中
+        const float3 w = mul(ds_local_inv, d_xyz);
+        for (int i = 0; i < 3; i++)
+        {
+            local_tet_w_buffer[idx * 3 + i] = w[i];
+        }
+    }
+}
+
+
+/**
+ * 获取GS全局嵌入四面体
+ * 由于原函数对每一个四面体都调用一次，感觉性能浪费严重，尝试改成对一个物体调用一次，一个线程负责单个GS对单个四面体的权重计算
+ * 看起来一个GS对应
+ * @param id 线程ID
+ */
+// 使用groupshared 数组优化计算速度
+[numthreads(BLOCK_SIZE,1,1)]
+void get_global_embeded_tet(uint3 id : SV_DispatchThreadID)
+{
+    const uint idx = id.x;
+    const int gs_local_id = idx / 4;
+    const int c = idx % 4;
+    if (gs_local_id < gs_local_count)
+    {
+        const int gs_global_id = gs_local_id + gs_local_offset;
+        const float3 local_pos = float3(local_tet_x_buffer[(gs_global_id * 4 + c) * 3 + 0],
+                                        local_tet_x_buffer[(gs_global_id * 4 + c) * 3 + 1],
+                                        local_tet_x_buffer[(gs_global_id * 4 + c) * 3 + 2]);
+        // 改：一个线程遍历所有的四面体
+        for (int global_embeded_tid = cell_local_offset; global_embeded_tid < cell_local_count + cell_local_offset;
+             global_embeded_tid++)
+        {
+            // 简易包围盒剔除四面体
+            const float3 global_pos[4] = {
+                vertices_X_buffer[cell_indices_buffer[global_embeded_tid * 4 + 0]],
+                vertices_X_buffer[cell_indices_buffer[global_embeded_tid * 4 + 1]],
+                vertices_X_buffer[cell_indices_buffer[global_embeded_tid * 4 + 2]],
+                vertices_X_buffer[cell_indices_buffer[global_embeded_tid * 4 + 3]]
+            };
+            const float3 min_pos = min(min(global_pos[0], global_pos[1]), min(global_pos[2], global_pos[3]));
+            if (any(local_pos <= min_pos))
+            {
+                continue;
+            }
+            const float3 max_pos = max(max(global_pos[0], global_pos[1]), max(global_pos[2], global_pos[3]));
+            if (any(local_pos >= max_pos))
+            {
+                continue;
+            }
+            // ds是全局四面体的三个顶点和全局四面体主顶点的坐标向量差
+            const float3x3 ds = transpose(float3x3(global_pos[0] - global_pos[3],
+                                                   global_pos[1] - global_pos[3],
+                                                   global_pos[2] - global_pos[3]));
+
+
+            const float3x3 ds_inv = inverse_3x3(ds);
+            const float3 pos = vertices_X_buffer[cell_indices_buffer[global_embeded_tid * 4 + 3]];
+            // local_tet_x是我们计算生成的四面体坐标
+            // dxyz是本地四面体的四个顶点之一和全局四面体的主顶点的坐标向量差
+            const float3 dxyz = local_pos - pos;
+            const float3 w = mul(ds_inv, dxyz);
+            // “两层嵌入”核心步骤：每一个GS先嵌入local_embeded_tet，然后在这里用local_embeded_tet的数据嵌入到global_embeded_tet中
+            // 如果没有满足条件的就置为0
+            if (w[0] >= 0.f && w[1] >= 0.f && w[2] >= 0.f &&
+                w[0] + w[1] + w[2] <= 1.f)
+            {
+                global_tet_idx_buffer[gs_global_id * 4 + c] = global_embeded_tid;
+                global_tet_w_buffer[(gs_global_id * 4 + c) * 3 + 0] = w[0];
+                global_tet_w_buffer[(gs_global_id * 4 + c) * 3 + 1] = w[1];
+                global_tet_w_buffer[(gs_global_id * 4 + c) * 3 + 2] = w[2];
+                break;
+            }
+        }
+    }
+}
+
+/**
+ * 初始化FEM模拟
+ * @param id 线程ID
+ */
+[numthreads(BLOCK_SIZE,1,1)]
+void init_fem_bases(uint3 id : SV_DispatchThreadID)
+{
+    int idx = id.x;
+    if(idx<cell_total_count)
+    {
+        float DS[3][3];
+        float3x3 DS_inv=inverse_3x3(DS);
+    }
+}
+
+/**
+ * 初始化逆质量
+ * @param id 线程ID
+ */
+[numthreads(BLOCK_SIZE,1,1)]
+void init_inv_mass(uint3 id : SV_DispatchThreadID)
+{
+    
+}
+
+/**
+ * 初始化刚体模拟
+ * @param id 线程ID
+ */
+[numthreads(BLOCK_SIZE,1,1)]
+void init_rigid(uint3 id : SV_DispatchThreadID)
+{
 }

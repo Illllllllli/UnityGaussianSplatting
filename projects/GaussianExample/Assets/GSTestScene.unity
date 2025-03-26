@@ -26,7 +26,7 @@ RenderSettings:
   m_AmbientIntensity: 1
   m_AmbientMode: 0
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
-  m_SkyboxMaterial: {fileID: 2100000, guid: e9c9951d4a35e4a54812fa0280fa548c, type: 2}
+  m_SkyboxMaterial: {fileID: 10304, guid: 0000000000000000f000000000000000, type: 0}
   m_HaloStrength: 0.5
   m_FlareStrength: 1
   m_FlareFadeSpeed: 3
@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 0}
-  m_IndirectSpecularColor: {r: 0, g: 0, b: 0, a: 1}
+  m_IndirectSpecularColor: {r: 0.17408301, g: 0.20944485, b: 0.25294438, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -4750,6 +4750,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   mainCamera: {fileID: 1462254337}
+  simulateShader: {fileID: 7200000, guid: 34d7a8e036b642639367ed1e5a47c440, type: 3}
+  radixShader: {fileID: 0}
+  copyShader: {fileID: 0}
   frameDt: 0.0075
   dt: 0.00101
   gravity: -4
@@ -4759,12 +4762,8 @@ MonoBehaviour:
   collisionMinimalDist: 0.005
   collisionDetectionIterInterval: 100
   isZUp: 0
-  groundHeight: 0
-  globalScale: 1
-  globalRotation: {x: 0, y: 0, z: 0, w: 0}
-  globalOffset: {x: 0, y: 0, z: 0}
-  objectOffsets: []
   boundary: 0
+  initializeMilliSeconds: 0
   totalSimulateMilliSeconds: 0
   totalSteps: 0
 --- !u!1 &191860520
@@ -31856,13 +31855,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1462254335}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.033624128, y: -0.6589722, z: 0.029520912, w: -0.75083524}
-  m_LocalPosition: {x: -7.43, y: -0.11, z: -1.94}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: -9.2}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 6.64, y: 107.109, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1464176026
 GameObject:
   m_ObjectHideFlags: 0

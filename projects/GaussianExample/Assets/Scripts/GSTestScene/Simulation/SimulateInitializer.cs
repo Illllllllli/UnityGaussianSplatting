@@ -1,11 +1,16 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using GaussianSplatting.Runtime;
 using GSTestScene.Simulation;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace GSTestScene.Simulation
 {
@@ -52,6 +57,10 @@ namespace GSTestScene.Simulation
         {
             try
             {
+                // GS相关缓冲区
+                _gsPosBuffer = new ComputeBuffer(_totalGsCount * 3, sizeof(uint)); // position(3)
+                _gsOtherBuffer = new ComputeBuffer(_totalGsCount * 4, sizeof(uint)); // rotation(1) + scale(3)
+                // 网格相关缓冲区
                 _vertxBuffer = new ComputeBuffer(_totalVerticesCount, sizeof(float) * 3);
                 _vertXBuffer = new ComputeBuffer(_totalVerticesCount, sizeof(float) * 3);
                 _vertGroupBuffer = new ComputeBuffer(_totalVerticesCount, sizeof(int));
@@ -95,11 +104,18 @@ namespace GSTestScene.Simulation
                 _sortedIndicesBuffer = new ComputeBuffer(_totalFacesCount, sizeof(int));
                 _faceFlagsBuffer = new ComputeBuffer(_totalFacesCount, sizeof(int));
 
+                int bvhSize = _totalFacesCount * 2 - 1;
+                _lbvhAabbsBuffer = new ComputeBuffer(bvhSize, Marshal.SizeOf<LbvhAABBBoundingBox>());
+                _lbvhNodesBuffer = new ComputeBuffer(bvhSize, Marshal.SizeOf<LbvhNode>());
+                // 执行Radix排序以更新SortBufferSize
+                if (!RadixSort<ulong, int>(_sortedMortonCodeBuffer, _mortonCodeBuffer, _sortedIndicesBuffer,
+                        _indicesBuffer, null, _totalFacesCount)) return false;
+                _lbvhSortBuffer = new ComputeBuffer(_lbvhSortBufferSize, sizeof(uint));
+
                 _collisionPairsBuffer = new ComputeBuffer(MaxCollisionPairs, Marshal.SizeOf<int2>());
                 _totalPairsBuffer = new ComputeBuffer(1, sizeof(int));
                 _exactCollisionPairsBuffer = new ComputeBuffer(MaxCollisionPairs, Marshal.SizeOf<int4>());
                 _totalExactPairsBuffer = new ComputeBuffer(1, sizeof(int));
-
                 _covBuffer = new ComputeBuffer(_totalGsCount, sizeof(float) * 9);
                 _localTetXBuffer = new ComputeBuffer(_totalGsCount, sizeof(float) * 12);
                 _localTetWBuffer = new ComputeBuffer(_totalGsCount, sizeof(float) * 3);
@@ -123,7 +139,10 @@ namespace GSTestScene.Simulation
         {
             try
             {
-                // 传递所需数据
+                // 传递所需GS数据
+                BatchCopyToBuffer(_gsPosBuffer, o => o.gsPositionData, o => o.GsOffset, 3, true);
+                BatchCopyToBuffer(_gsOtherBuffer, o => o.gsOtherData, o => o.GsOffset, 4);
+                // 传递所需网格数据
                 BatchCopyToBuffer(_vertXBuffer, o => o.VerticesData, o => o.VerticesOffset, 3);
                 BatchCopyToBuffer(_vertxBuffer, o => o.VerticesData, o => o.VerticesOffset, 3);
                 BatchCopyToBuffer(_vertGroupBuffer, o => o.VerticesGroupData, o => o.VerticesOffset, 1);
@@ -148,7 +167,8 @@ namespace GSTestScene.Simulation
                 ComputeBuffer targetBuffer,
                 Func<GaussianObject, NativeArray<TDataType>> dataSelector, // 动态选择数据源
                 Func<GaussianObject, int> offsetCalculator, // 计算对象在缓冲区的偏移
-                int elementStride // 元素步长(如顶点3=float3)
+                int elementStride, // 元素步长(如顶点3=float3)
+                bool skipEnd = false // 是否跳过最后一个元素(GS位置数据貌似多了一个元素用于标记末尾)
             ) where TDataType : struct
             {
                 // 预合并所有数据到临时数组
@@ -167,6 +187,10 @@ namespace GSTestScene.Simulation
                     // 计算写入位置
                     int dstStart = offsetCalculator(gaussianObject) * elementStride;
                     int copyLength = srcData.Length;
+                    if (skipEnd)
+                    {
+                        copyLength--;
+                    }
 
                     // 分段拷贝
                     NativeArray<TDataType>.Copy(
@@ -181,6 +205,61 @@ namespace GSTestScene.Simulation
         }
 
         /// <summary>
+        /// 初始化GS网格插值
+        /// </summary>
+        /// <returns>是否初始化成功</returns>
+        private bool InitializeInterpolation()
+        {
+            try
+            {
+                InitializeCovariance();
+                GetLocalEmbededTets();
+                // TestBufferFinish<float>(_localTetWBuffer);
+                // SubmitTaskAndSynchronize();
+                SetBufferValue(0xffffffff, 4 * _totalGsCount, 0, _globalTetIdxBuffer);
+                foreach (var gaussianObject in _gaussianObjects.Where(gaussianObject => !gaussianObject.IsBackground))
+                {
+                    // 改成一个物体调用一次
+                    GetGlobalEmbededTet(gaussianObject);
+                    // TestBufferFinish<float>(_globalTetWBuffer);
+                    // SubmitTaskAndSynchronize();
+                }
+
+
+                return true;
+            }
+            catch (Exception e)
+            {
+                Debug.Log(e);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 初始化PDB-FEM模拟
+        /// </summary>
+        /// <returns></returns>
+        private bool InitializePbdFem()
+        {
+            try
+            {
+                InitializeFemBases();
+                TestBufferFinish<float>(_vertMassBuffer);
+                SubmitTaskAndSynchronize();
+                InitializeInvMass();
+                TestBufferFinish<float>(_vertInvMassBuffer);
+                SubmitTaskAndSynchronize();
+                return true;
+            }
+            catch (Exception e)
+            {
+                Debug.Log(e);
+                return false;
+            }
+        }
+
+
+        /// <summary>
         /// 初始化每个GaussianObject的属性，在此基础上初始化整个Simulator的公共属性
         /// </summary>
         private bool InitializeSimulationParams()
@@ -189,41 +268,80 @@ namespace GSTestScene.Simulation
             if (!InitializeGaussianObjects()) return false;
             // 初始化所有必要缓冲区
             if (!InitializeAllocBuffers()) return false;
-            // todo: 执行Radix排序
-
-            // todo:将每个Object的子数据按偏移复制到公共缓冲区
+            // 将每个Object的子数据按偏移复制到公共缓冲区
             if (!InitializeFillBuffers()) return false;
-            // todo:gs网格插值初始化
-
+            // gs网格插值初始化
+            if (!InitializeInterpolation()) return false;
             // todo:PBD-FEM初始化
-
+            if (!InitializePbdFem()) return false;
             // todo:刚体初始化
+            if (!InitializeRigid()) return false;
+            
             return true;
         }
 
         /// <summary>
-        ///更新选定顶点的缓冲区
+        /// 清除所有缓冲区
         /// </summary>
-        private void UpdateSelectVertices()
+        private void Dispose()
         {
-            int threadGroups = Mathf.CeilToInt(_vertxBuffer.count / ThreadCount);
-            // 鼠标没有按下时，清空选定的顶点
-            if (_currentMousePos == Vector2.positiveInfinity)
-            {
-                simulateShader.SetBuffer(cleanSelectionKernel, _vertSelectedIndicesBufferId,
-                    _vertSelectedIndicesBuffer);
-                simulateShader.Dispatch(cleanSelectionKernel, threadGroups, 1, 1);
-            }
-            // 否则，更新选定的顶点
-            else
-            {
-                simulateShader.SetFloat(_controllerRadiusId, ControllerRadius);
-                simulateShader.SetVector(_controllerPositionId, _currentMousePosWorld);
-                simulateShader.SetBuffer(selectVerticesKernel, _vertxBufferId, _vertxBuffer);
-                simulateShader.SetBuffer(selectVerticesKernel, _vertSelectedIndicesBufferId,
-                    _vertSelectedIndicesBuffer);
-                simulateShader.Dispatch(selectVerticesKernel, threadGroups, 1, 1);
-            }
+            _gsPosBuffer?.Dispose();
+            _gsOtherBuffer?.Dispose();
+
+            _vertxBuffer?.Dispose();
+            _vertXBuffer?.Dispose();
+            _vertGroupBuffer?.Dispose();
+
+            _edgeIndicesBuffer?.Dispose();
+            _faceIndicesBuffer?.Dispose();
+            _cellIndicesBuffer?.Dispose();
+
+            _vertVelocityBuffer?.Dispose();
+            _vertForceBuffer?.Dispose();
+            _vertMassBuffer?.Dispose();
+            _vertInvMassBuffer?.Dispose();
+            _vertNewXBuffer?.Dispose();
+            _vertDeltaPosBuffer?.Dispose();
+            _vertSelectedIndicesBuffer?.Dispose();
+            _rigidVertGroupBuffer?.Dispose();
+            _cellMultiplierBuffer?.Dispose();
+            _cellDsInvBuffer?.Dispose();
+            _cellVolumeInitBuffer?.Dispose();
+            _cellDensityBuffer?.Dispose();
+            _cellMuBuffer?.Dispose();
+            _cellLambdaBuffer?.Dispose();
+
+            _rigidMassBuffer?.Dispose();
+            _rigidMassCenterInitBuffer?.Dispose();
+            _rigidMassCenterBuffer?.Dispose();
+            _rigidAngleVelocityMatrixBuffer?.Dispose();
+            _rigidRotationMatrixBuffer?.Dispose();
+
+            _triangleAabbsBuffer?.Dispose();
+            _sortedTriangleAabbsBuffer?.Dispose();
+            _partialAabbBuffer?.Dispose();
+            _partialAabbData.Dispose();
+            _mortonCodeBuffer?.Dispose();
+            _sortedMortonCodeBuffer?.Dispose();
+            _indicesBuffer?.Dispose();
+            _sortedIndicesBuffer?.Dispose();
+            _faceFlagsBuffer?.Dispose();
+            _lbvhAabbsBuffer?.Dispose();
+            _lbvhNodesBuffer?.Dispose();
+            _lbvhSortBuffer?.Dispose();
+
+            _collisionPairsBuffer?.Dispose();
+            _exactCollisionPairsBuffer?.Dispose();
+            _totalPairsBuffer?.Dispose();
+            _totalExactPairsBuffer?.Dispose();
+
+            _covBuffer?.Dispose();
+            _localTetXBuffer?.Dispose();
+            _localTetWBuffer?.Dispose();
+            _globalTetIdxBuffer?.Dispose();
+            _globalTetWBuffer?.Dispose();
+
+            _commandBuffer?.Dispose();
         }
     }
 }

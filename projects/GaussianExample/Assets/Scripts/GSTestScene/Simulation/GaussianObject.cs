@@ -18,7 +18,7 @@ namespace GSTestScene.Simulation
         // 引用区
         private GaussianSplatRenderer _renderer; // gs渲染器
 
-        private MaterialProperty MaterialProperty; // 材质属性
+        private MaterialProperty _materialProperty; // 材质属性
 
         // 数据区
 
@@ -55,7 +55,7 @@ namespace GSTestScene.Simulation
 
         // 参数区
         public bool IsBackground; //是否是背景
-        public bool isRigid => MaterialProperty.isRigid; // 是否是刚体
+        public bool isRigid => _materialProperty.isRigid; // 是否是刚体
 
         // 模拟无关参数
         private const int InnerBatchCount = 64;
@@ -79,7 +79,7 @@ namespace GSTestScene.Simulation
         {
             // 初始化属性
             _renderer = renderer;
-            MaterialProperty = materialProperty;
+            _materialProperty = materialProperty;
 
             // 初始化偏移量
             GsOffset = gsOffset;
@@ -138,13 +138,13 @@ namespace GSTestScene.Simulation
                     .Complete();
 
                 // 给网格的边/面/四面体数据索引加上全局顶点偏移量
-                new FillJob<int> { Data = EdgesData, Value = verticesOffset }
+                new AddIntJob { Data = EdgesData, Value = verticesOffset }
                     .Schedule(EdgesData.Length, InnerBatchCount)
                     .Complete();
-                new FillJob<int> { Data = FacesData, Value = verticesOffset }
+                new AddIntJob { Data = FacesData, Value = verticesOffset }
                     .Schedule(FacesData.Length, InnerBatchCount)
                     .Complete();
-                new FillJob<int> { Data = CellsData, Value = verticesOffset }
+                new AddIntJob { Data = CellsData, Value = verticesOffset }
                     .Schedule(CellsData.Length, InnerBatchCount)
                     .Complete();
             }
@@ -292,23 +292,26 @@ namespace GSTestScene.Simulation
             MuData.Dispose();
             LambdaData.Dispose();
         }
-
-        /// <summary>
-        /// 用于并行填充整个数组
-        /// </summary>
-        [BurstCompile]
-        private struct FillJob<T> : IJobParallelFor where T : struct
-        {
-            public NativeArray<T> Data;
-            public T Value;
-            public void Execute(int index) => Data[index] = Value;
-        }
-
-        private struct AddIntJob : IJobParallelFor
-        {
-            public NativeArray<int> Data;
-            public int Value;
-            public void Execute(int index) => Data[index] += Value;
-        }
     }
+}
+
+/// <summary>
+/// 用于并行填充整个数组
+/// </summary>
+[BurstCompile]
+internal struct FillJob<T> : IJobParallelFor where T : struct
+{
+    public NativeArray<T> Data;
+    public T Value;
+    public void Execute(int index) => Data[index] = Value;
+}
+
+/// <summary>
+/// 用于并行给整个数组添加常数值
+/// </summary>
+internal struct AddIntJob : IJobParallelFor
+{
+    public NativeArray<int> Data;
+    public int Value;
+    public void Execute(int index) => Data[index] += Value;
 }

@@ -1,0 +1,56 @@
+// 用于按偏移量和长度复制缓冲区数据
+#pragma kernel copy_buffer
+#define BATCH_SIZE 1024
+
+RWByteAddressBuffer copy_src_buffer; // 源缓冲区（只读）
+RWByteAddressBuffer copy_dst_buffer; // 目标缓冲区（可写）
+
+int copy_src_offset; // 源缓冲区起始偏移（元素）
+int copy_dst_offset; // 目标缓冲区起始偏移（元素）
+int copy_element_size; // 单个元素字节大小（如 sizeof(float3)）
+int copy_length; // 需拷贝的元素数量
+
+[numthreads(BATCH_SIZE, 1, 1)]
+void copy_buffer(uint3 id : SV_DispatchThreadID)
+{
+    // 计算当前线程处理的元素索引
+    const uint element_index = id.x;
+    if (element_index >= copy_length) return;
+
+    // 计算字节偏移
+    uint src_byte_pos = (copy_src_offset + element_index) * copy_element_size;
+    uint dst_byte_pos = (copy_dst_offset + element_index) * copy_element_size;
+
+    // 读取源数据并写入目标
+    // 分块拷贝（按最大对齐块处理）
+    uint bytes_remaining = copy_element_size;
+    while (bytes_remaining > 0)
+    {
+        // 优先处理对齐块
+        if (bytes_remaining >= 16 && (src_byte_pos % 16 == 0) && (dst_byte_pos % 16 == 0))
+        {
+            const uint4 data = copy_src_buffer.Load<uint4>(src_byte_pos);
+           copy_dst_buffer.Store<uint4>(dst_byte_pos, data);
+            src_byte_pos += 16;
+            dst_byte_pos += 16;
+            bytes_remaining -= 16;
+        }
+        else if (bytes_remaining >= 8)
+        {
+            const uint2 data = copy_src_buffer.Load<uint2>(src_byte_pos);
+            copy_dst_buffer.Store<uint2>(dst_byte_pos, data);
+            src_byte_pos += 8;
+            dst_byte_pos += 8;
+            bytes_remaining -= 8;
+        }
+        else
+        {
+            // 逐4字节处理剩余部分
+            const uint data = copy_src_buffer.Load<uint>(src_byte_pos);
+            copy_dst_buffer.Store<uint>(dst_byte_pos, data);
+            src_byte_pos += 4;
+            dst_byte_pos += 4;
+            bytes_remaining -= 4;
+        }
+    }
+}

@@ -192,7 +192,6 @@ namespace GSTestScene
 
                 else
                 {
-                    ShowTip("Press 'Space' to pause the process of simulation");
                     GetComponent<GaussianSimulator>().StartSimulate(true);
                     Status.SwitchSimulateMode();
                     SetButtonColor(simulateButton, EnableColor);
