@@ -270,8 +270,8 @@ namespace GSTestScene.Simulation
             try
             {
                 InitRigid();
-                TestBufferFinish<float>(_rigidMassCenterInitBuffer);
-                TestBufferFinish<float>(_rigidMassBuffer);
+                // TestBufferFinish<float>(_rigidMassCenterInitBuffer);
+                // TestBufferFinish<float>(_rigidMassBuffer);
                 SubmitTaskAndSynchronize();
                 return true;
             }

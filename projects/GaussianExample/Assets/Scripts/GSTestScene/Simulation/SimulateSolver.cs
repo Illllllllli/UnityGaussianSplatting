@@ -8,8 +8,10 @@
         /// <summary>
         /// 应用外力
         /// </summary>
-        private void ApplyExternalForce()
+        private void ApplyExternalForce(float dt0)
         {
+            ApplyExternalForceCompute(dt0);
+            SubmitTaskAndSynchronize();
         }
 
         /// <summary>

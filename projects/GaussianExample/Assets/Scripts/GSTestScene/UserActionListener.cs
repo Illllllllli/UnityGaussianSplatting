@@ -169,7 +169,7 @@ namespace GSTestScene
                 if (!isMousePressed) return;
                 if (Status.isInteractive < 0) return;
                 if (GsTools.IsPointerOverUIObject()) return;
-                if (Status.playMode == PlayMode.Select) return;
+                if (Status.playMode != PlayMode.View) return;
                 {
                     Vector2 mouseDelta = ctx.ReadValue<Vector2>();
 
@@ -363,7 +363,7 @@ namespace GSTestScene
             BindSelectModeInput();
             BindSimulateInput();
         }
-        
+
         /// <summary>
         /// 在这里面进行相机移动
         /// </summary>

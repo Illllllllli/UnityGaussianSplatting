@@ -27,7 +27,8 @@
 #pragma kernel aabb_reduce_4
 #pragma kernel aabb_reduce_2
 #pragma kernel aabb_reduce_1
-
+//
+#pragma kernel apply_external_force
 
 #include "MathUtils.hlsl"
 #include "SimulateUtils.hlsl"
@@ -39,7 +40,11 @@
 #define PI 3.1415926
 
 // 输入数据
-
+// 全局物理参数
+float gravity; //重力
+float dt; // 模拟的子步长
+float damping_coefficient; // 阻尼系数
+int z_up; // z轴坐标系方向
 // 控制器参数
 float3 controller_position; //控制器的位置
 float3 controller_velocity; //控制器的速度
@@ -433,7 +438,7 @@ void init_rigid(uint3 id : SV_DispatchThreadID)
 }
 
 
-/// 碰撞检测部分
+/// 碰撞检测部分 ///
 
 float collision_detection_dist; //compute_triangle_aabbs和query_collision_triangles共用
 int aabb_grid_size; // 线程块总数
@@ -746,10 +751,11 @@ void query_collision_triangles(uint3 id : SV_DispatchThreadID)
 
 groupshared lbvh_aabb aabb_shared_data[512];
 
-/// 
-/// @param tid 当前线程局部ID
-/// @param block_size 线程块大小
-/// @param block_idx 线程块ID
+/**
+ * @param tid 当前线程局部ID
+ * @param block_size 线程块大小
+ *  @param block_idx 线程块ID
+*/
 inline void aabb_reduce(int tid, const int block_size, int block_idx)
 {
     int i = block_idx * block_size * 2 + tid;
@@ -877,4 +883,30 @@ void aabb_reduce_2(uint3 gid : SV_GroupID, uint3 g_tid : SV_GroupThreadID)
 void aabb_reduce_1(uint3 gid : SV_GroupID, uint3 g_tid : SV_GroupThreadID)
 {
     aabb_reduce(g_tid.x, 1, gid.x);
+}
+
+/// 物理求解部分 ///
+
+
+/**
+ * 应用外力(重力和控制器施加的力)
+ * @param id 线程ID
+ **/
+[numthreads(256,1,1)]
+void apply_external_force(uint3 id : SV_DispatchThreadID)
+{
+    int idx = id.x;
+    if (idx < vertices_total_count)
+    {
+        if (vert_inv_mass_buffer[idx] > 0)
+        {
+            // 应用重力
+            for (int i = 0; i < 3; i++)
+            {
+                vert_velocity_buffer[idx * 3 + i] *= exp(-dt * damping_coefficient);
+            }
+
+            const float rotation_factor = 0.05f; //旋转因子。虽然目前可能没什么用
+        }
+    }
 }

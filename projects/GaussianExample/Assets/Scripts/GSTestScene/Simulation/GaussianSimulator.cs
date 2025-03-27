@@ -54,7 +54,7 @@ namespace GSTestScene.Simulation
         public float gravity = -4.0f;
 
         // 阻尼系数，用于模拟能量耗散（空气阻力）
-        public float dampingCoeffient = 5.0f;
+        public float dampingCoefficient = 5.0f;
 
         // XPBD（Extended Position-Based Dynamics）求解器的迭代次数
         public int xpbdRestIter = 25;
@@ -69,7 +69,7 @@ namespace GSTestScene.Simulation
         public float collisionDetectionIterInterval = 100;
 
         // 切换全局坐标系的上方向
-        public bool isZUp = false;
+        public int isZUp = 1;
 
 
         // 边界标志位。但不知道具体干什么用
@@ -124,11 +124,11 @@ namespace GSTestScene.Simulation
         private const float ControllerRadius = 1f; // 鼠标能控制的顶点半径范围
         private const float ReferenceDepth = 5.0f; // 假设交互固定发生在相机前方5米平面
         private float _lastMouseTime; // 上一次鼠标时间
-        private Vector2 _lastMousePos = Vector2.positiveInfinity; // 上一次鼠标位置
-        private Vector2 _currentMousePos = Vector2.positiveInfinity; // 本次鼠标位置
-        private Vector3 _currentMousePosWorld = Vector3.positiveInfinity; // 本次鼠标位置的世界坐标
-        private Vector3 _mouseVelocity = Vector3.positiveInfinity; // 速度
-        private readonly Vector3 _mouseAngularVelocity = Vector3.zero; // 角速度，但是感觉没有办法正确检测，因此先固定为0
+        private Vector2 _lastControllerScreenPos = Vector2.positiveInfinity; // 上一次鼠标位置
+        private Vector2 _controllerScreenPos = Vector2.positiveInfinity; // 本次鼠标位置
+        private Vector3 _controllerPosition = Vector3.positiveInfinity; // 本次鼠标位置的世界坐标
+        private Vector3 _controllerVelocity = Vector3.positiveInfinity; // 速度
+        private readonly Vector3 _controllerAngularVelocity = Vector3.zero; // 角速度，但是感觉没有办法正确检测，因此先固定为0
 
 
         // 网格相关基本参数
@@ -243,6 +243,11 @@ namespace GSTestScene.Simulation
         private readonly int _blellochLengthId = Shader.PropertyToID("blelloch_length");
 
         // simulateShader
+        // 全局物理参数
+        private readonly int _gravityId = Shader.PropertyToID("gravity");
+        private readonly int _dtId = Shader.PropertyToID("dt");
+        private readonly int _dampingCoefficientId = Shader.PropertyToID("damping_coefficient");
+        private readonly int _zUpId = Shader.PropertyToID("z_up");
 
         //控制器
         private readonly int _controllerPositionId = Shader.PropertyToID("controller_position");
@@ -273,6 +278,7 @@ namespace GSTestScene.Simulation
         private readonly int _faceIndicesBufferId = Shader.PropertyToID("face_indices_buffer");
         private readonly int _cellIndicesBufferId = Shader.PropertyToID("cell_indices_buffer");
 
+        private readonly int _vertVelocityBufferId = Shader.PropertyToID("vert_velocity_buffer");
         private readonly int _vertForceBufferId = Shader.PropertyToID("vert_force_buffer");
         private readonly int _vertMassBufferId = Shader.PropertyToID("vert_mass_buffer");
         private readonly int _vertInvMassBufferId = Shader.PropertyToID("vert_inv_mass_buffer");
@@ -365,6 +371,7 @@ namespace GSTestScene.Simulation
         private int aabbReduce4Kernel => simulateShader.FindKernel("aabb_reduce_4");
         private int aabbReduce2Kernel => simulateShader.FindKernel("aabb_reduce_2");
         private int aabbReduce1Kernel => simulateShader.FindKernel("aabb_reduce_1");
+        private int applyExternalForceKernel => simulateShader.FindKernel("apply_external_force");
 
         // 其他默认参数
         private const int ShDegree = 3; //sh阶数
@@ -378,7 +385,7 @@ namespace GSTestScene.Simulation
         {
             // 记录时间和位置
             _lastMouseTime = Time.time;
-            _lastMousePos = Mouse.current.position.ReadValue();
+            _lastControllerScreenPos = Mouse.current.position.ReadValue();
         }
 
         /// <summary>
@@ -387,9 +394,9 @@ namespace GSTestScene.Simulation
         public void MouseUp()
         {
             // 清空所有位置信息
-            _lastMousePos = Vector2.positiveInfinity;
-            _currentMousePos = Vector2.positiveInfinity;
-            _mouseVelocity = Vector3.positiveInfinity;
+            _lastControllerScreenPos = Vector2.positiveInfinity;
+            _controllerScreenPos = Vector2.positiveInfinity;
+            _controllerVelocity = Vector3.positiveInfinity;
             _lastMouseTime = 0;
         }
 
@@ -400,16 +407,17 @@ namespace GSTestScene.Simulation
         /// <param name="cam">当前相机</param>
         private void UpdateMouseVelocity(float time, Camera cam)
         {
-            if (_lastMousePos.Equals(Vector2.positiveInfinity)) return;
-            _currentMousePos = Mouse.current.position.ReadValue();
-            _currentMousePosWorld = GsTools.GetMouseWorldPos(_currentMousePos, mainCamera, ReferenceDepth);
+            // todo:更改一下逻辑以获取正确的鼠标深度（通过步进和并行检测来实现简易raycasting)
+            if (_lastControllerScreenPos.Equals(Vector2.positiveInfinity)) return;
+            _controllerScreenPos = Mouse.current.position.ReadValue();
+            _controllerPosition = GsTools.GetMouseWorldPos(_controllerScreenPos, mainCamera, ReferenceDepth);
             //计算屏幕空间速度
-            Vector2 screenDelta = _currentMousePos - _lastMousePos;
+            Vector2 screenDelta = _controllerScreenPos - _lastControllerScreenPos;
             float deltaTime = time - _lastMouseTime;
             Vector2 screenVelocity = screenDelta / deltaTime;
-            _mouseVelocity = GsTools.ScreenToWorldVelocity(cam, screenVelocity, ReferenceDepth);
+            _controllerVelocity = GsTools.ScreenToWorldVelocity(cam, screenVelocity, ReferenceDepth);
             // 更新上次屏幕位置和触发时间为本次统计
-            _lastMousePos = _currentMousePos;
+            _lastControllerScreenPos = _controllerScreenPos;
             _lastMouseTime = time;
         }
 
@@ -512,7 +520,6 @@ namespace GSTestScene.Simulation
 
         void Start()
         {
-            
         }
 
         // Update is called once per frame
@@ -525,7 +532,7 @@ namespace GSTestScene.Simulation
                 if (isMousePressed)
                 {
                     UpdateMouseVelocity(Time.time, mainCamera);
-                    Debug.Log($"velocity:{_mouseVelocity}");
+                    // Debug.Log($"velocity:{_controllerVelocity}");
                 }
 
                 //根据鼠标的位置选择范围内的顶点，更新数据
@@ -550,14 +557,15 @@ namespace GSTestScene.Simulation
                     float dt0 = Mathf.Min(dt, dtLeft);
                     dtLeft -= dt0;
 
-
+                    // 应用外力（重力/阻尼和控制器外力）
                     using (TimerUtil xpbdTimer = new TimerUtil("Apply External Force"))
                     {
-                        ApplyExternalForce();
+                        ApplyExternalForce(dt0);
                         _cellMultiplierBuffer.SetData(new float[_totalCellsCount]);
                         totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
                     }
 
+                    // 进行FEM约束求解和碰撞处理
                     for (int i = 0; i < xpbdRestIter; i++)
                     {
                         using (TimerUtil xpbdTimer = new TimerUtil("Memset"))

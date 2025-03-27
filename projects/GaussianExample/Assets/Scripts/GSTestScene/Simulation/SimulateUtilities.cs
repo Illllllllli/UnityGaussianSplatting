@@ -298,7 +298,7 @@ namespace GSTestScene.Simulation
         {
             int gridSize = CeilDivide(_vertxBuffer.count, SimulateBlockSize);
             // 鼠标没有按下时，清空选定的顶点
-            if (_currentMousePos == Vector2.positiveInfinity)
+            if (_controllerScreenPos == Vector2.positiveInfinity)
             {
                 SetShaderComputeBuffer(simulateShader, cleanSelectionKernel, _vertSelectedIndicesBufferId,
                     _vertSelectedIndicesBuffer);
@@ -308,7 +308,7 @@ namespace GSTestScene.Simulation
             else
             {
                 _commandBuffer.SetComputeFloatParam(simulateShader, _controllerRadiusId, ControllerRadius);
-                _commandBuffer.SetComputeVectorParam(simulateShader, _controllerPositionId, _currentMousePosWorld);
+                _commandBuffer.SetComputeVectorParam(simulateShader, _controllerPositionId, _controllerPosition);
                 SetShaderComputeBuffer(simulateShader, selectVerticesKernel, _vertxBufferId,
                     _vertxBuffer);
                 SetShaderComputeBuffer(simulateShader, selectVerticesKernel, _vertSelectedIndicesBufferId,
@@ -581,6 +581,33 @@ namespace GSTestScene.Simulation
             SetShaderComputeBuffer(simulateShader, kernel, _partialAabbBufferId, _partialAabbBuffer);
             _commandBuffer.SetComputeIntParam(simulateShader, _aabbGridSizeId, blocks);
             _commandBuffer.DispatchCompute(simulateShader, kernel, blocks, 1, 1);
+        }
+
+        /// <summary>
+        /// 实际调用GPU应用外力
+        /// </summary>
+        private void ApplyExternalForceCompute(float dt0)
+        {
+            int gridSize = CeilDivide(_totalVerticesCount, SimulateBlockSize);
+            SetShaderComputeBuffer(simulateShader, applyExternalForceKernel, _vertInvMassBufferId, _vertInvMassBuffer);
+            SetShaderComputeBuffer(simulateShader, applyExternalForceKernel, _vertxBufferId, _vertxBuffer);
+            SetShaderComputeBuffer(simulateShader, applyExternalForceKernel, _vertVelocityBufferId,
+                _vertVelocityBuffer);
+            SetShaderComputeBuffer(simulateShader, applyExternalForceKernel, _vertNewXBufferId, _vertNewXBuffer);
+            SetShaderComputeBuffer(simulateShader, applyExternalForceKernel, _vertSelectedIndicesBufferId,
+                _vertSelectedIndicesBuffer);
+            _commandBuffer.SetComputeVectorParam(simulateShader, _controllerPositionId,
+                _controllerPosition);
+            _commandBuffer.SetComputeVectorParam(simulateShader, _controllerVelocityId,
+                _controllerVelocity);
+            _commandBuffer.SetComputeVectorParam(simulateShader, _controllerAngleVelocityId,
+                _controllerAngularVelocity);
+            _commandBuffer.SetComputeIntParam(simulateShader, _verticesTotalCountId, _totalVerticesCount);
+            _commandBuffer.SetComputeFloatParam(simulateShader, _dtId, dt0);
+            _commandBuffer.SetComputeFloatParam(simulateShader, _gravityId, gravity);
+            _commandBuffer.SetComputeFloatParam(simulateShader, _dampingCoefficientId, dampingCoefficient);
+            _commandBuffer.SetComputeIntParam(simulateShader, _zUpId, isZUp);
+            _commandBuffer.DispatchCompute(simulateShader, applyExternalForceKernel, gridSize, 1, 1);
         }
     }
 
