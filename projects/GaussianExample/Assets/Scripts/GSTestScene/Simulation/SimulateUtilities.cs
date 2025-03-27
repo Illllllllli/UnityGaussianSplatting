@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Unity.Collections;
@@ -23,6 +24,22 @@ namespace GSTestScene.Simulation
         private static int CeilDivide(int dividend, int divider)
         {
             return (dividend + divider - 1) / divider;
+        }
+
+        /// <summary>
+        /// 获取当前整数的下一个2的幂次
+        /// </summary>
+        /// <param name="x">当前整数</param>
+        /// <returns>返回离x最近的下一个2的幂次</returns>
+        private int next_pow_2(int x)
+        {
+            --x;
+            x |= x >> 1;
+            x |= x >> 2;
+            x |= x >> 4;
+            x |= x >> 8;
+            x |= x >> 16;
+            return ++x;
         }
 
         /// <summary>
@@ -60,15 +77,13 @@ namespace GSTestScene.Simulation
         {
             if (_lastBuffer != null)
             {
-                _commandBuffer.RequestAsyncReadback(_lastBuffer, _ => { Debug.Log("synchronized"); }); //监视最新的缓冲区
+                _commandBuffer.RequestAsyncReadback(_lastBuffer, _ => { }); //监视最新的缓冲区
                 _commandBuffer.WaitAllAsyncReadbackRequests();
                 _lastBuffer = null;
             }
 
             Graphics.ExecuteCommandBuffer(_commandBuffer);
             _commandBuffer.Clear();
-
-            Debug.Log("finish");
         }
 
         /// <summary>
@@ -281,7 +296,6 @@ namespace GSTestScene.Simulation
         /// </summary>
         private void UpdateSelectVertices()
         {
-            
             int gridSize = CeilDivide(_vertxBuffer.count, SimulateBlockSize);
             // 鼠标没有按下时，清空选定的顶点
             if (_currentMousePos == Vector2.positiveInfinity)
@@ -301,6 +315,8 @@ namespace GSTestScene.Simulation
                     _vertSelectedIndicesBuffer);
                 _commandBuffer.DispatchCompute(simulateShader, selectVerticesKernel, gridSize, 1, 1);
             }
+
+            SubmitTaskAndSynchronize();
         }
 
         /// <summary>
@@ -389,37 +405,185 @@ namespace GSTestScene.Simulation
         }
 
         /// <summary>
-        /// 初始化刚体模拟
+        /// 初始化刚体系统
         /// </summary>
-        /// <returns></returns>
-        private bool InitializeRigid()
+        private void InitRigid()
         {
-            try
-            {
-                InitRigid();
-                TestBufferFinish<double>(_rigidMassCenterInitBuffer);
-                return true;
-            }
-            catch (Exception e)
-            {
-                Debug.Log(e);
-                return false;
-            }
+            int gridSize = CeilDivide(_totalVerticesCount, SimulateBlockSize);
+            SetShaderComputeBuffer(simulateShader, initRigidKernel, _vertXBufferId, _vertXBuffer);
+            SetShaderComputeBuffer(simulateShader, initRigidKernel, _rigidMassBufferId, _rigidMassBuffer);
+            SetShaderComputeBuffer(simulateShader, initRigidKernel, _rigidMassCenterInitBufferId,
+                _rigidMassCenterInitBuffer);
+            SetShaderComputeBuffer(simulateShader, initRigidKernel, _rigidVertGroupBufferId, _rigidVertGroupBuffer);
+            SetShaderComputeBuffer(simulateShader, initRigidKernel, _vertMassBufferId, _vertMassBuffer);
+            _commandBuffer.SetComputeIntParam(simulateShader, _verticesTotalCountId, _totalVerticesCount);
+            _commandBuffer.DispatchCompute(simulateShader, initRigidKernel, gridSize, 1, 1);
+        }
 
-            void InitRigid()
+        /// <summary>
+        /// 计算三角面AABB包围盒
+        /// </summary>
+        private void ComputeTriangleAabbs(float extendedDist = 0)
+        {
+            int gridSize = CeilDivide(_totalFacesCount, SimulateBlockSize);
+            SetShaderComputeBuffer(simulateShader, computeTriangleAabbsKernel, _vertxBufferId, _vertxBuffer);
+            SetShaderComputeBuffer(simulateShader, computeTriangleAabbsKernel, _faceIndicesBufferId,
+                _faceIndicesBuffer);
+            SetShaderComputeBuffer(simulateShader, computeTriangleAabbsKernel, _triangleAabbsBufferId,
+                _triangleAabbsBuffer);
+            _commandBuffer.SetComputeIntParam(simulateShader, _faceTotalCountId, _totalFacesCount);
+            _commandBuffer.SetComputeFloatParam(simulateShader, _collisionDetectionDistId, extendedDist);
+            _commandBuffer.DispatchCompute(simulateShader, computeTriangleAabbsKernel, gridSize, 1, 1);
+        }
+
+        /// <summary>
+        /// 计算Morton码并生成索引
+        /// </summary>
+        private void ComputeMortonAndIndices()
+        {
+            int gridSize = CeilDivide(_totalFacesCount, SimulateBlockSize);
+            SetShaderComputeBuffer(simulateShader, computeMortonAndIndicesKernel, _partialAabbBufferId,
+                _partialAabbBuffer);
+            SetShaderComputeBuffer(simulateShader, computeMortonAndIndicesKernel, _triangleAabbsBufferId,
+                _triangleAabbsBuffer);
+            SetShaderComputeBuffer(simulateShader, computeMortonAndIndicesKernel, _mortonCodeBufferId,
+                _mortonCodeBuffer);
+            SetShaderComputeBuffer(simulateShader, computeMortonAndIndicesKernel, _indicesBufferId, _indicesBuffer);
+            _commandBuffer.SetComputeIntParam(simulateShader, _faceTotalCountId, _totalFacesCount);
+            _commandBuffer.DispatchCompute(simulateShader, computeMortonAndIndicesKernel, gridSize, 1, 1);
+        }
+
+
+        /// <summary>
+        /// 获取排序后的三角面包围盒
+        /// </summary>
+        private void GetSortedTriangleAabbs()
+        {
+            int gridSize = CeilDivide(_totalFacesCount, SimulateBlockSize);
+            SetShaderComputeBuffer(simulateShader, getSortedTriangleAabbsKernel, _sortedIndicesBufferId,
+                _sortedIndicesBuffer);
+            SetShaderComputeBuffer(simulateShader, getSortedTriangleAabbsKernel, _triangleAabbsBufferId,
+                _triangleAabbsBuffer);
+            SetShaderComputeBuffer(simulateShader, getSortedTriangleAabbsKernel, _sortedTriangleAabbsBufferId,
+                _sortedTriangleAabbsBuffer);
+            _commandBuffer.SetComputeIntParam(simulateShader, _faceTotalCountId, _totalFacesCount);
+            _commandBuffer.DispatchCompute(simulateShader, getSortedTriangleAabbsKernel, gridSize, 1, 1);
+        }
+
+
+        /// <summary>
+        /// 初始化BVH的AABB节点
+        /// </summary>
+        private void ResetAabb(int nodeCount)
+        {
+            int gridSize = CeilDivide(nodeCount, SimulateBlockSize);
+            SetShaderComputeBuffer(simulateShader, resetAABBKernel, _lbvhAabbsBufferId,
+                _lbvhAabbsBuffer);
+            SetShaderComputeBuffer(simulateShader, resetAABBKernel, _sortedTriangleAabbsBufferId,
+                _sortedTriangleAabbsBuffer);
+            _commandBuffer.SetComputeIntParam(simulateShader, _faceTotalCountId, _totalFacesCount);
+            _commandBuffer.DispatchCompute(simulateShader, resetAABBKernel, gridSize, 1, 1);
+        }
+
+        /// <summary>
+        /// 构建LBVH内部节点
+        /// </summary>
+        private void ConstructInternalNodes()
+        {
+            int gridSize = CeilDivide(_totalFacesCount - 1, SimulateBlockSize);
+            SetShaderComputeBuffer(simulateShader, constructInternalNodesKernel, _sortedMortonCodeBufferId,
+                _sortedMortonCodeBuffer);
+            SetShaderComputeBuffer(simulateShader, constructInternalNodesKernel, _lbvhNodesBufferId,
+                _lbvhNodesBuffer);
+            _commandBuffer.SetComputeIntParam(simulateShader, _faceTotalCountId, _totalFacesCount);
+            _commandBuffer.DispatchCompute(simulateShader, constructInternalNodesKernel, gridSize, 1, 1);
+        }
+
+        /// <summary>
+        /// 计算LBVH内部的AABB节点
+        /// </summary>
+        private void ComputeInternalAabbs()
+        {
+            int gridSize = CeilDivide(_totalFacesCount - 1, SimulateBlockSize);
+            SetShaderComputeBuffer(simulateShader, computeInternalAabbsKernel, _lbvhNodesBufferId,
+                _lbvhNodesBuffer);
+            SetShaderComputeBuffer(simulateShader, computeInternalAabbsKernel, _lbvhAabbsBufferId,
+                _lbvhAabbsBuffer);
+            SetShaderComputeBuffer(simulateShader, computeInternalAabbsKernel, _faceFlagsBufferId,
+                _faceFlagsBuffer);
+            _commandBuffer.SetComputeIntParam(simulateShader, _faceTotalCountId, _totalFacesCount);
+            _commandBuffer.DispatchCompute(simulateShader, computeInternalAabbsKernel, gridSize, 1, 1);
+        }
+
+        /// <summary>
+        /// 查询碰撞对
+        /// </summary>
+        private void QueryCollisionPairs()
+        {
+            int gridSize = CeilDivide(_totalFacesCount, CullingBlockSize);
+            SetShaderComputeBuffer(simulateShader, queryCollisionPairsKernel, _triangleAabbsBufferId,
+                _triangleAabbsBuffer);
+            SetShaderComputeBuffer(simulateShader, queryCollisionPairsKernel, _lbvhNodesBufferId,
+                _lbvhNodesBuffer);
+            SetShaderComputeBuffer(simulateShader, queryCollisionPairsKernel, _lbvhAabbsBufferId,
+                _lbvhAabbsBuffer);
+            SetShaderComputeBuffer(simulateShader, queryCollisionPairsKernel, _sortedIndicesBufferId,
+                _sortedIndicesBuffer);
+            SetShaderComputeBuffer(simulateShader, queryCollisionPairsKernel, _collisionPairsBufferId,
+                _collisionPairsBuffer);
+            SetShaderComputeBuffer(simulateShader, queryCollisionPairsKernel, _totalPairsBufferId,
+                _totalPairsBuffer);
+            _commandBuffer.SetComputeIntParam(simulateShader, _faceTotalCountId, _totalFacesCount);
+            _commandBuffer.DispatchCompute(simulateShader, queryCollisionPairsKernel, gridSize, 1, 1);
+        }
+
+
+        /// <summary>
+        /// 查询碰撞三角面
+        /// </summary>
+        private void QueryCollisionTriangles()
+        {
+            int gridSize = CeilDivide(_totalPairsCount[0], SimulateBlockSize);
+            if (gridSize <= 0) return; //可能没有碰撞对
+            SetShaderComputeBuffer(simulateShader, queryCollisionTrianglesKernel, _totalPairsBufferId,
+                _totalPairsBuffer);
+            SetShaderComputeBuffer(simulateShader, queryCollisionTrianglesKernel, _collisionPairsBufferId,
+                _collisionPairsBuffer);
+            SetShaderComputeBuffer(simulateShader, queryCollisionTrianglesKernel, _vertxBufferId,
+                _vertxBuffer);
+            SetShaderComputeBuffer(simulateShader, queryCollisionTrianglesKernel, _vertGroupBufferId,
+                _vertGroupBuffer);
+            SetShaderComputeBuffer(simulateShader, queryCollisionTrianglesKernel, _faceIndicesBufferId,
+                _faceIndicesBuffer);
+            SetShaderComputeBuffer(simulateShader, queryCollisionTrianglesKernel, _exactCollisionPairsBufferId,
+                _exactCollisionPairsBuffer);
+            SetShaderComputeBuffer(simulateShader, queryCollisionTrianglesKernel, _totalExactPairsBufferId,
+                _totalExactPairsBuffer);
+            _commandBuffer.SetComputeFloatParam(simulateShader, _collisionDetectionDistId, collisionMinimalDist);
+            _commandBuffer.DispatchCompute(simulateShader, queryCollisionTrianglesKernel, gridSize, 1, 1);
+        }
+
+        /// <summary>
+        /// 计算轴对齐包围盒的合并结果
+        /// </summary>
+        private void LaunchAabbReduce(int blocks, int threads)
+        {
+            Dictionary<int, int> kernelThreads = new Dictionary<int, int>
             {
-                int gridSize = CeilDivide(_totalVerticesCount, SimulateBlockSize);
-                SetShaderComputeBuffer(simulateShader, initRigidKernel, _vertXBufferId, _vertXBuffer);
-                SetShaderComputeBuffer(simulateShader, initRigidKernel, _rigidMassBufferId, _rigidMassBuffer);
-                SetShaderComputeBuffer(simulateShader, initRigidKernel, _rigidMassCenterInitBufferId,
-                    _rigidMassCenterInitBuffer);
-                SetShaderComputeBuffer(simulateShader, initRigidKernel, _rigidVertGroupBufferId, _rigidVertGroupBuffer);
-                SetShaderComputeBuffer(simulateShader, initRigidKernel, _vertMassBufferId, _vertMassBuffer);
-                _commandBuffer.SetComputeIntParam(simulateShader, _verticesTotalCountId, _totalVerticesCount);
-                _commandBuffer.DispatchCompute(simulateShader, initRigidKernel, gridSize, 1, 1);
-            }
+                { 512, aabbReduce512Kernel }, { 256, aabbReduce256Kernel },
+                { 128, aabbReduce128Kernel }, { 64, aabbReduce64Kernel },
+                { 32, aabbReduce32Kernel }, { 16, aabbReduce16Kernel },
+                { 8, aabbReduce8Kernel }, { 4, aabbReduce4Kernel },
+                { 2, aabbReduce2Kernel }, { 1, aabbReduce1Kernel }
+            };
+            int kernel = kernelThreads[threads];
+            SetShaderComputeBuffer(simulateShader, kernel, _triangleAabbsBufferId, _triangleAabbsBuffer);
+            SetShaderComputeBuffer(simulateShader, kernel, _partialAabbBufferId, _partialAabbBuffer);
+            _commandBuffer.SetComputeIntParam(simulateShader, _aabbGridSizeId, blocks);
+            _commandBuffer.DispatchCompute(simulateShader, kernel, blocks, 1, 1);
         }
     }
+
 
     /// <summary>
     /// 材质属性类。这里的材质不是指渲染材质，而是指物理属性

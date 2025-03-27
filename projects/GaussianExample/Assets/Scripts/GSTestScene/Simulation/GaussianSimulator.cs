@@ -6,9 +6,11 @@ using System.Threading.Tasks;
 using GaussianSplatting.Runtime;
 using StartScene;
 using Unity.Collections;
+using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
+using UnityEngine.Serialization;
 using Debug = UnityEngine.Debug;
 
 namespace GSTestScene.Simulation
@@ -80,6 +82,21 @@ namespace GSTestScene.Simulation
         // 计算模拟用掉的时间
         public double totalSimulateMilliSeconds;
 
+        // 碰撞检测用掉的时间
+        public double totalCollisionDetectionMilliSeconds;
+
+        // XPBD用掉的时间
+        public double totalXpbdMilliSeconds;
+
+        // FEM求解用掉的时间
+        public double totalFemSolveMilliSeconds;
+
+        // 求解碰撞约束用掉的时间
+        public double totalCollisionSolveMilliSeconds;
+
+        // 重新将GS嵌入网格所需的时间
+        public double totalEmbededMilliSeconds;
+
         // 统计模拟的总计步数
         public ulong totalSteps;
 
@@ -88,10 +105,12 @@ namespace GSTestScene.Simulation
         private CommandBuffer _commandBuffer; // 命令缓冲区
         private ComputeBuffer _lastBuffer; // 标记commandBuffer中最后一个编辑的ComputeBuffer
 
+        private const float Sqrt3 = 1.73205080757f;
         private const int InnerBatchCount = 64; // BurstJob线程数量
 
 
         private const int SimulateBlockSize = 256; // 线程数量（常数,但是为了配合CeilToInt改成浮点数）
+        private const int CullingBlockSize = 128; // 面剔除线程数量
         private const int RadixSortBlockSize = 128; // RadixSort所用线程块大小
         private const int CopyBlockSize = 1024; // 复制缓冲区所用线程块大小
         private const int BlellochLogNumBanks = 5; // GPU共享内存的划分数的对数
@@ -102,7 +121,7 @@ namespace GSTestScene.Simulation
 
         // 鼠标控制相关参数
         private bool isMousePressed => GetComponent<UserActionListener>().isMousePressed; // 当前鼠标是否按下
-        private const float ControllerRadius = 1000f; // 鼠标能控制的顶点半径范围
+        private const float ControllerRadius = 1f; // 鼠标能控制的顶点半径范围
         private const float ReferenceDepth = 5.0f; // 假设交互固定发生在相机前方5米平面
         private float _lastMouseTime; // 上一次鼠标时间
         private Vector2 _lastMousePos = Vector2.positiveInfinity; // 上一次鼠标位置
@@ -148,6 +167,7 @@ namespace GSTestScene.Simulation
         private ComputeBuffer _cellLambdaBuffer; //四面体拉梅常数缓冲区
 
         // 刚体模拟参数
+        // 注意：这里从原版的double改成了float
         private ComputeBuffer _rigidMassBuffer; //刚体质量缓冲区
         private ComputeBuffer _rigidMassCenterInitBuffer; //刚体初始质心位置缓冲区
         private ComputeBuffer _rigidMassCenterBuffer; //刚体质心位置缓冲区
@@ -155,6 +175,7 @@ namespace GSTestScene.Simulation
         private ComputeBuffer _rigidRotationMatrixBuffer; //刚体旋转矩阵(3x3)缓冲区
 
         // 碰撞检测参数
+        private LbvhAABBBoundingBox _aabbGlobal; // 全局的轴对齐包围盒
         private ComputeBuffer _triangleAabbsBuffer; //排序前的三角面的轴对齐包围盒缓冲区
         private ComputeBuffer _sortedTriangleAabbsBuffer; //排序后的三角面轴对齐包围盒缓冲区
         private ComputeBuffer _partialAabbBuffer; //部分轴对齐包围盒缓冲区
@@ -172,7 +193,9 @@ namespace GSTestScene.Simulation
         private ComputeBuffer _collisionPairsBuffer; //粗略碰撞对缓冲区
         private ComputeBuffer _exactCollisionPairsBuffer; //精确碰撞对缓冲区
         private ComputeBuffer _totalPairsBuffer; //粗略碰撞对数量计数器缓冲区
+        private int[] _totalPairsCount = new int[1]; //粗略碰撞对数量
         private ComputeBuffer _totalExactPairsBuffer; //精确碰撞对数量计数器缓冲区
+        private int[] _totalExactPairsCount = new int[1]; //精确碰撞对数量
 
         // 插值用数据
         private ComputeBuffer _covBuffer; //协方差矩阵缓冲区
@@ -238,6 +261,7 @@ namespace GSTestScene.Simulation
 
         //网格
         private readonly int _verticesTotalCountId = Shader.PropertyToID("vertices_total_count");
+        private readonly int _faceTotalCountId = Shader.PropertyToID("face_total_count");
         private readonly int _cellTotalCountId = Shader.PropertyToID("cell_total_count");
         private readonly int _boundaryId = Shader.PropertyToID("boundary");
 
@@ -284,6 +308,10 @@ namespace GSTestScene.Simulation
         private readonly int _lbvhNodesBufferId = Shader.PropertyToID("lbvh_nodes_buffer");
         private readonly int _lbvhSortBufferId = Shader.PropertyToID("lbvh_sort_buffer");
 
+        // 碰撞检测额外参数
+        private readonly int _collisionDetectionDistId = Shader.PropertyToID("collision_detection_dist");
+        private readonly int _aabbGridSizeId = Shader.PropertyToID("aabb_grid_size");
+
         private readonly int _collisionPairsBufferId = Shader.PropertyToID("collision_pairs_buffer");
         private readonly int _exactCollisionPairsBufferId = Shader.PropertyToID("exact_collision_pairs_buffer");
         private readonly int _totalPairsBufferId = Shader.PropertyToID("total_pairs_buffer");
@@ -311,14 +339,32 @@ namespace GSTestScene.Simulation
         private int blellochAddBlockSumsKernel => radixShader.FindKernel("radix_blelloch_add_block_sums");
 
         // simulateShader
-        private int selectVerticesKernel => simulateShader.FindKernel("select_vertices"); //更新控制器选择顶点
-        private int cleanSelectionKernel => simulateShader.FindKernel("clean_selected_vertices"); //清除控制器选择顶点
-        private int initializeCovarianceKernel => simulateShader.FindKernel("initialize_covariance"); //初始化协方差矩阵
-        private int getLocalEmbededTetsKernel => simulateShader.FindKernel("get_local_embeded_tets"); //获取GS局部嵌入网格
-        private int getGlobalEmbededTetKernel => simulateShader.FindKernel("get_global_embeded_tet"); //获取GS局部嵌入网格
+        private int selectVerticesKernel => simulateShader.FindKernel("select_vertices");
+        private int cleanSelectionKernel => simulateShader.FindKernel("clean_selected_vertices");
+        private int initializeCovarianceKernel => simulateShader.FindKernel("initialize_covariance");
+        private int getLocalEmbededTetsKernel => simulateShader.FindKernel("get_local_embeded_tets");
+        private int getGlobalEmbededTetKernel => simulateShader.FindKernel("get_global_embeded_tet");
         private int initFemBasesKernel => simulateShader.FindKernel("init_fem_bases");
         private int initInvMassKernel => simulateShader.FindKernel("init_inv_mass");
         private int initRigidKernel => simulateShader.FindKernel("init_rigid");
+        private int computeTriangleAabbsKernel => simulateShader.FindKernel("compute_triangle_aabbs");
+        private int computeMortonAndIndicesKernel => simulateShader.FindKernel("compute_morton_and_indices");
+        private int getSortedTriangleAabbsKernel => simulateShader.FindKernel("get_sorted_triangle_aabbs");
+        private int resetAABBKernel => simulateShader.FindKernel("reset_aabb");
+        private int constructInternalNodesKernel => simulateShader.FindKernel("construct_internal_nodes");
+        private int computeInternalAabbsKernel => simulateShader.FindKernel("compute_internal_aabbs");
+        private int queryCollisionPairsKernel => simulateShader.FindKernel("query_collision_pairs");
+        private int queryCollisionTrianglesKernel => simulateShader.FindKernel("query_collision_triangles");
+        private int aabbReduce512Kernel => simulateShader.FindKernel("aabb_reduce_512");
+        private int aabbReduce256Kernel => simulateShader.FindKernel("aabb_reduce_256");
+        private int aabbReduce128Kernel => simulateShader.FindKernel("aabb_reduce_128");
+        private int aabbReduce64Kernel => simulateShader.FindKernel("aabb_reduce_64");
+        private int aabbReduce32Kernel => simulateShader.FindKernel("aabb_reduce_32");
+        private int aabbReduce16Kernel => simulateShader.FindKernel("aabb_reduce_16");
+        private int aabbReduce8Kernel => simulateShader.FindKernel("aabb_reduce_8");
+        private int aabbReduce4Kernel => simulateShader.FindKernel("aabb_reduce_4");
+        private int aabbReduce2Kernel => simulateShader.FindKernel("aabb_reduce_2");
+        private int aabbReduce1Kernel => simulateShader.FindKernel("aabb_reduce_1");
 
         // 其他默认参数
         private const int ShDegree = 3; //sh阶数
@@ -439,6 +485,11 @@ namespace GSTestScene.Simulation
             totalSteps = 0;
             initializeMilliSeconds = 0;
             totalSimulateMilliSeconds = 0;
+            totalCollisionDetectionMilliSeconds = 0;
+            totalXpbdMilliSeconds = 0;
+            totalFemSolveMilliSeconds = 0;
+            totalCollisionSolveMilliSeconds = 0;
+            totalEmbededMilliSeconds = 0;
             _lbvhSortBufferSize = 0;
             _totalGsCount = 0;
             _totalVerticesCount = 0;
@@ -461,7 +512,7 @@ namespace GSTestScene.Simulation
 
         void Start()
         {
-            _commandBuffer = new CommandBuffer { name = "Command Buffer" };
+            
         }
 
         // Update is called once per frame
@@ -469,7 +520,7 @@ namespace GSTestScene.Simulation
         {
             if (Status.IsSimulating)
             {
-                using TimerUtil util = new TimerUtil("Simulate");
+                using TimerUtil simulateTimer = new TimerUtil("Simulate");
                 //拖拽过程中，更新鼠标速度
                 if (isMousePressed)
                 {
@@ -477,18 +528,96 @@ namespace GSTestScene.Simulation
                     Debug.Log($"velocity:{_mouseVelocity}");
                 }
 
-
                 //根据鼠标的位置选择范围内的顶点，更新数据
                 UpdateSelectVertices();
 
-                //todo: 剩余步骤
+                //碰撞检测计数
+                int collisionCount = 0;
+                // 将一帧长(frame_dt)分割成多个子时间段(dt)
+                float dtLeft = frameDt;
+                while (dtLeft > 0f)
+                {
+                    // 每隔 collision_dection_iter_interval 步执行一次碰撞检测，减少计算量
+                    if (collisionCount % collisionDetectionIterInterval == 0)
+                    {
+                        using TimerUtil collisionDetectionTimer = new TimerUtil("Collision Detection");
+                        // 执行碰撞检测
+                        CollisionDetection();
+                        totalCollisionDetectionMilliSeconds += collisionDetectionTimer.GetDeltaTime();
+                    }
 
+                    collisionCount++;
+                    float dt0 = Mathf.Min(dt, dtLeft);
+                    dtLeft -= dt0;
+
+
+                    using (TimerUtil xpbdTimer = new TimerUtil("Apply External Force"))
+                    {
+                        ApplyExternalForce();
+                        _cellMultiplierBuffer.SetData(new float[_totalCellsCount]);
+                        totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
+                    }
+
+                    for (int i = 0; i < xpbdRestIter; i++)
+                    {
+                        using (TimerUtil xpbdTimer = new TimerUtil("Memset"))
+                        {
+                            _vertDeltaPosBuffer.SetData(new float3[_totalVerticesCount]);
+                            totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
+                        }
+
+                        // FEM求解：处理弹性形变
+                        using (TimerUtil femTimer = new TimerUtil("Solve FEM Constraints"))
+                        {
+                            SolveFemConstraints();
+                            totalFemSolveMilliSeconds += femTimer.GetDeltaTime();
+                        }
+
+                        // 碰撞约束：解决顶点与三角形面之间的穿透
+                        using (TimerUtil collisionSolveTimer =
+                               new TimerUtil("Solve Triangle Point Distance Constraint"))
+                        {
+                            SolveTrianglePointDistanceConstraint();
+                            totalCollisionSolveMilliSeconds += collisionSolveTimer.GetDeltaTime();
+                        }
+
+                        // 更新位置
+                        using (TimerUtil xpbdTimer = new TimerUtil("PBD Post Solve"))
+                        {
+                            PbdPostSolve();
+                            totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
+                        }
+                    }
+
+                    // 将子步长的计算结果应用到顶点位置，完成时间步进
+                    using (TimerUtil xpbdTimer = new TimerUtil("PBD Advance"))
+                    {
+                        PbdAdvance();
+                        totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
+                    }
+                }
+
+                // 计算刚体的质心运动（平移）和旋转，更新顶点位置
+                using (TimerUtil xpbdTimer = new TimerUtil("Solve Rigid"))
+                {
+                    SolveRigid();
+                    totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
+                }
+
+                // 将物理顶点位置转换为高斯泼溅的渲染属性（位置、缩放、旋转）。
+                // 插值方法：基于四面体权重（tet_w）在全局和局部坐标系间插值。
+                using (TimerUtil interpolateTimer = new TimerUtil("Apply Interpolation"))
+                {
+                    ApplyInterpolation();
+                    totalXpbdMilliSeconds += interpolateTimer.GetDeltaTime();
+                }
+
+                // 提交任务并同步
+                SubmitTaskAndSynchronize();
                 // 更新总计模拟时间
-                totalSimulateMilliSeconds += util.GetDeltaTime();
+                totalSimulateMilliSeconds += simulateTimer.GetDeltaTime();
                 // 更新总步数
                 totalSteps++;
-
-                // Debug.Log($"total simulate time:{totalSimulateMilliSeconds}ms");
             }
         }
 
@@ -512,7 +641,6 @@ namespace GSTestScene.Simulation
 
 /// <summary>
 /// 统计函数运行时间的工具类。
-/// 定义时放入计时指针，退出上下文自动增加
 /// </summary>
 internal class TimerUtil : IDisposable
 {

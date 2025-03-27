@@ -8,14 +8,34 @@
 #pragma kernel init_fem_bases
 #pragma kernel init_inv_mass
 #pragma kernel init_rigid
+#pragma kernel compute_triangle_aabbs
+#pragma kernel compute_morton_and_indices
+#pragma kernel get_sorted_triangle_aabbs
+#pragma kernel reset_aabb
+#pragma kernel construct_internal_nodes
+#pragma kernel compute_internal_aabbs
+#pragma kernel query_collision_pairs
+#pragma kernel query_collision_triangles
+//根据不同面数情况选择不同线程数量的方法
+#pragma kernel aabb_reduce_512
+#pragma kernel aabb_reduce_256
+#pragma kernel aabb_reduce_128
+#pragma kernel aabb_reduce_64
+#pragma kernel aabb_reduce_32
+#pragma kernel aabb_reduce_16
+#pragma kernel aabb_reduce_8
+#pragma kernel aabb_reduce_4
+#pragma kernel aabb_reduce_2
+#pragma kernel aabb_reduce_1
+
 
 #include "MathUtils.hlsl"
 #include "SimulateUtils.hlsl"
+#include "LBVH.hlsl"
 
 //预定义量
-
-
 #define BLOCK_SIZE 256
+#define CULLING_BLOCK_SIZE 128
 #define PI 3.1415926
 
 // 输入数据
@@ -39,6 +59,7 @@ int gs_local_offset;
 
 // 全局网格参数
 int vertices_total_count;
+int face_total_count;
 int cell_total_count;
 int boundary;
 // 网格缓冲区参数
@@ -50,14 +71,44 @@ RWStructuredBuffer<int> edge_indices_buffer; // 边索引
 RWStructuredBuffer<int> face_indices_buffer; // 面索引
 RWStructuredBuffer<int> cell_indices_buffer; // 四面体索引
 
-RWStructuredBuffer<float> vert_mass_buffer; //顶点质量
+//注意：为了实现原子加法，类型由float更改为uint
+RWStructuredBuffer<float> vert_velocity_buffer; //顶点速度缓冲区
+RWStructuredBuffer<float> vert_force_buffer; //顶点受力缓冲区
+RWStructuredBuffer<uint> vert_mass_buffer; //顶点质量
 RWStructuredBuffer<float> vert_inv_mass_buffer; //顶点逆质量
-RWStructuredBuffer<int> vert_selected_indices; //被选中的顶点的索引列表（1为被选中）
+RWStructuredBuffer<float3> vert_new_x_buffer; //顶点新位置缓冲区
+RWStructuredBuffer<float3> vert_delta_pos_buffer; //顶点位移增量缓冲区
+RWStructuredBuffer<int> vert_selected_indices_buffer; //被选中的顶点的索引列表（1为被选中）
 RWStructuredBuffer<int> rigid_vert_group_buffer; //刚体组索引
+RWStructuredBuffer<float> cell_multiplier_buffer; //四面体形变乘数缓冲区
 RWStructuredBuffer<float> cell_ds_inv_buffer; // 逆变形梯度矩阵
 RWStructuredBuffer<float> cell_volume_init_buffer; //四面体初始体积
 RWStructuredBuffer<float> cell_density_buffer; // 四面体密度
+RWStructuredBuffer<float> cell_mu_buffer; //四面体剪切模量缓冲区
+RWStructuredBuffer<float> cell_lambda_buffer; //四面体拉梅常数缓冲区
 
+//注意：因为double的原子加法难以自行实现，所以更改原始数据类型为float
+//注意：为了实现原子加法，类型由float更改为uint
+RWStructuredBuffer<uint> rigid_mass_buffer; //刚体质量
+RWStructuredBuffer<uint> rigid_mass_center_init_buffer; //刚体初始质心
+RWStructuredBuffer<uint> rigid_mass_center_buffer; //刚体质心
+
+RWStructuredBuffer<lbvh_aabb> triangle_aabbs_buffer; //排序前的三角面的轴对齐包围盒缓冲区
+RWStructuredBuffer<lbvh_aabb> sorted_triangle_aabbs_buffer; //排序后的三角面轴对齐包围盒缓冲区
+RWStructuredBuffer<lbvh_aabb> partial_aabb_buffer; //部分轴对齐包围盒缓冲区
+RWStructuredBuffer<uint2> morton_code_buffer; //排序前的莫顿编码缓冲区
+RWStructuredBuffer<uint2> sorted_morton_code_buffer; //排序后的莫顿编码缓冲区
+RWStructuredBuffer<int> indices_buffer; //排序前的面片索引缓冲区
+RWStructuredBuffer<int> sorted_indices_buffer; //排序后的面片索引缓冲区
+RWStructuredBuffer<int> face_flags_buffer; //标记每个面片的状态的缓冲区
+RWStructuredBuffer<lbvh_aabb> lbvh_aabbs_buffer; //LBVH树每个树节点的包围盒缓冲区
+RWStructuredBuffer<lbvh_node> lbvh_nodes_buffer; //LBVH树节点的父子关系缓冲区
+RWStructuredBuffer<uint> lbvh_sort_buffer; //LBVH的中间排序结果缓冲区
+
+RWStructuredBuffer<int2> collision_pairs_buffer; //粗略碰撞对缓冲区
+RWStructuredBuffer<int4> exact_collision_pairs_buffer; //精确碰撞对缓冲区
+RWStructuredBuffer<int> total_pairs_buffer; //粗略碰撞对数量计数器缓冲区
+RWStructuredBuffer<int> total_exact_pairs_buffer; //精确碰撞对数量计数器缓冲区
 
 RWStructuredBuffer<float> cov_buffer; //协方差矩阵
 RWStructuredBuffer<float> local_tet_x_buffer; //本地四面体顶点坐标缓冲区
@@ -65,13 +116,12 @@ RWStructuredBuffer<float> local_tet_w_buffer; //本地四面体顶点坐标权�
 RWStructuredBuffer<int> global_tet_idx_buffer; //全局四面体顶点坐标索引缓冲区
 RWStructuredBuffer<float> global_tet_w_buffer; //全局四面体顶点坐标权重缓冲区
 
-RWStructuredBuffer<double> rigid_mass_buffer; //刚体质量
-RWStructuredBuffer<double> rigid_mass_center_init_buffer; //刚体初始质心
-RWStructuredBuffer<double> rigid_mass_center_buffer; //刚体质心
-
 // 局部(单物体)网格参数
 int cell_local_count;
 int cell_local_offset;
+
+/// 控制器更新部分 ///
+
 /**
  * 根据控制器位置更新选定的顶点
  * @param id 线程ID
@@ -85,7 +135,7 @@ void select_vertices(uint3 id : SV_DispatchThreadID)
 
     if (dist <= controller_radius)
     {
-        vert_selected_indices[idx] |= 1; // 使用最低位表示选中状态
+        vert_selected_indices_buffer[idx] |= 1; // 使用最低位表示选中状态
     }
 }
 
@@ -97,8 +147,10 @@ void select_vertices(uint3 id : SV_DispatchThreadID)
 void clean_selected_vertices(uint3 id : SV_DispatchThreadID)
 {
     const uint idx = id.x;
-    vert_selected_indices[idx] &= ~1; // 清除最低位
+    vert_selected_indices_buffer[idx] &= ~1; // 清除最低位
 }
+
+/// 初始化部分 ///
 
 /**
  * 初始化协方差矩阵
@@ -231,12 +283,12 @@ void get_global_embeded_tet(uint3 id : SV_DispatchThreadID)
                 vertices_X_buffer[cell_indices_buffer[global_embeded_tid * 4 + 3]]
             };
             const float3 min_pos = min(min(global_pos[0], global_pos[1]), min(global_pos[2], global_pos[3]));
-            if (any(local_pos <= min_pos))
+            if (any(local_pos < min_pos))
             {
                 continue;
             }
             const float3 max_pos = max(max(global_pos[0], global_pos[1]), max(global_pos[2], global_pos[3]));
-            if (any(local_pos >= max_pos))
+            if (any(local_pos > max_pos))
             {
                 continue;
             }
@@ -274,22 +326,89 @@ void get_global_embeded_tet(uint3 id : SV_DispatchThreadID)
 [numthreads(BLOCK_SIZE,1,1)]
 void init_fem_bases(uint3 id : SV_DispatchThreadID)
 {
-    int idx = id.x;
-    if(idx<cell_total_count)
+    const int idx = id.x;
+
+    if (idx < cell_total_count)
     {
-        float DS[3][3];
-        float3x3 DS_inv=inverse_3x3(DS);
+        // 计算顶点距离差
+        float3x3 DS;
+        for (int i = 0; i < 3; i++)
+        {
+            DS[i] = vertices_X_buffer[cell_indices_buffer[idx * 4 + i]] - vertices_X_buffer[
+                cell_indices_buffer[idx * 4 + 3]];
+        }
+        DS = transpose(DS);
+        const float3x3 DS_inv = inverse_3x3(DS);
+        store_matrix_float(DS_inv, cell_ds_inv_buffer, idx);
+        // 计算体积
+        const float volume = abs(determinant(DS / 6.0f));
+        cell_volume_init_buffer[idx] = volume;
+        // 更新每个顶点的质量
+        for (int i = 0; i < 4; i++)
+        {
+            atomic_add_float(vert_mass_buffer, cell_indices_buffer[idx * 4 + i],
+                             0.25f * cell_density_buffer[idx] * volume);
+        }
     }
 }
 
 /**
- * 初始化逆质量
+ * 初始化逆质量.但这是在干什么
  * @param id 线程ID
  */
 [numthreads(BLOCK_SIZE,1,1)]
 void init_inv_mass(uint3 id : SV_DispatchThreadID)
 {
-    
+    const int idx = id.x;
+    const float mass = asfloat(vert_mass_buffer[idx]);
+    if (idx < vertices_total_count)
+    {
+        if (boundary == 0 && mass == 0.f)
+        {
+            vert_inv_mass_buffer[idx] = 0.f;
+        }
+
+        else if (boundary == 1 && (mass == 0.f || vertices_X_buffer[idx][2] >= 1.3f))
+        {
+            // Fox
+            vert_inv_mass_buffer[idx] = 0.f;
+        }
+        else if (boundary == 2 && (mass == 0.f || vertices_X_buffer[idx][1] >= (0.79f -
+            1.5f)))
+        {
+            // Bear
+            vert_inv_mass_buffer[idx] = 0.f;
+        }
+        else if (boundary == 3 && (mass == 0.f || vertices_X_buffer[idx][1] >= 0.3f))
+        {
+            // JLS
+            vert_inv_mass_buffer[idx] = 0.f;
+        }
+        else if (boundary == 4 && (mass == 0.f || vertices_X_buffer[idx][1] >= -0.1f))
+        {
+            // revised basket
+            vert_inv_mass_buffer[idx] = 0.f;
+        }
+        else if (boundary == 10 && (mass == 0.f || vertices_X_buffer[idx][2] <= -0.5f))
+        {
+            // ficus
+            vert_inv_mass_buffer[idx] = 0.f;
+        }
+        else if (boundary == 20 && (mass == 0.f || vertices_X_buffer[idx][0] <= 0.3f))
+        {
+            // microphone
+            vert_inv_mass_buffer[idx] = 0.f;
+        }
+        else if (boundary == 30 && (mass == 0.f || vertices_X_buffer[idx][2] >= 0.8026f))
+        {
+            // chair
+            vert_inv_mass_buffer[idx] = 0.f;
+        }
+        else
+        {
+            vert_inv_mass_buffer[idx] = 1.f / mass;
+        }
+    }
 }
 
 /**
@@ -299,4 +418,463 @@ void init_inv_mass(uint3 id : SV_DispatchThreadID)
 [numthreads(BLOCK_SIZE,1,1)]
 void init_rigid(uint3 id : SV_DispatchThreadID)
 {
+    const int idx = id.x;
+    if (idx < vertices_total_count && rigid_vert_group_buffer[idx] >= 0)
+    {
+        const int rigid_object_id = rigid_vert_group_buffer[idx];
+        for (int i = 0; i < 3; i++)
+        {
+            //计算质心
+            atomic_add_float(rigid_mass_center_init_buffer, rigid_object_id * 3 + i,
+                             asfloat(vert_mass_buffer[idx]) * vertices_X_buffer[idx][i]);
+        }
+        atomic_add_float(rigid_mass_buffer, rigid_object_id, asfloat(vert_mass_buffer[idx]));
+    }
+}
+
+
+/// 碰撞检测部分
+
+float collision_detection_dist; //compute_triangle_aabbs和query_collision_triangles共用
+int aabb_grid_size; // 线程块总数
+/**
+ * 计算三角面AABB包围盒
+ * @param id 线程ID
+ */
+[numthreads(BLOCK_SIZE,1,1)]
+void compute_triangle_aabbs(uint3 id : SV_DispatchThreadID)
+{
+    const int idx = id.x;
+    if (idx < face_total_count)
+    {
+        const float3 verts[3] = {
+            vertices_x_buffer[face_indices_buffer[idx * 3]],
+            vertices_x_buffer[face_indices_buffer[idx * 3 + 1]],
+            vertices_x_buffer[face_indices_buffer[idx * 3 + 2]]
+        };
+        triangle_aabbs_buffer[idx].lower = min(min(verts[0], verts[1]), verts[2]) - collision_detection_dist;
+        triangle_aabbs_buffer[idx].upper = max(max(verts[0], verts[1]), verts[2]) + collision_detection_dist;
+    }
+}
+
+/**
+ * 计算Morton码并生成索引
+ * @param id 线程ID
+ */
+[numthreads(BLOCK_SIZE,1,1)]
+void compute_morton_and_indices(uint3 id : SV_DispatchThreadID)
+{
+    const int idx = id.x;
+    if (idx < face_total_count)
+    {
+        const lbvh_aabb whole = partial_aabb_buffer[0];
+        float3 p = get_aabb_center(triangle_aabbs_buffer[idx]);
+        p -= whole.lower;
+        p /= (whole.upper - whole.lower);
+        //x存储低位，y存储高位
+        morton_code_buffer[idx].x = idx;
+        morton_code_buffer[idx].y = (get_morton_code(p));
+        indices_buffer[idx] = idx;
+    }
+}
+
+/**
+ * 获取排序后的三角面包围盒
+ * @param id 线程ID
+ */
+[numthreads(BLOCK_SIZE,1,1)]
+void get_sorted_triangle_aabbs(uint3 id : SV_DispatchThreadID)
+{
+    const int idx = id.x;
+    if (idx < face_total_count)
+    {
+        sorted_triangle_aabbs_buffer[idx] = triangle_aabbs_buffer[sorted_indices_buffer[idx]];
+    }
+}
+
+/**
+ * 初始化BVH的AABB节点
+ * @param id 线程ID
+ */
+[numthreads(BLOCK_SIZE,1,1)]
+void reset_aabb(uint3 id : SV_DispatchThreadID)
+{
+    const int idx = id.x;
+    const int internal_nodes_count = face_total_count - 1;
+    const int nodes_count = face_total_count * 2 - 1;
+    if (idx < nodes_count)
+    {
+        if (idx < internal_nodes_count)
+        {
+            lbvh_aabbs_buffer[idx].lower = asfloat(0x7f7fffff);
+            lbvh_aabbs_buffer[idx].upper = asfloat(0xff7fffff);
+        }
+        else
+        {
+            lbvh_aabbs_buffer[idx] = sorted_triangle_aabbs_buffer[idx - internal_nodes_count];
+        }
+    }
+}
+
+/**
+ * 构建LBVH内部节点
+ * @param id 线程ID
+ */
+[numthreads(BLOCK_SIZE,1,1)]
+void construct_internal_nodes(uint3 id : SV_DispatchThreadID)
+{
+    const int idx = id.x;
+    int internal_nodes_count = face_total_count - 1;
+    if (idx < internal_nodes_count)
+    {
+        const uint2 ij = determine_range(sorted_morton_code_buffer, face_total_count, idx);
+        const int gamma = find_split(sorted_morton_code_buffer, face_total_count, ij.x, ij.y);
+        lbvh_nodes_buffer[idx].left_idx = gamma;
+        lbvh_nodes_buffer[idx].right_idx = gamma + 1;
+        if (min(ij.x, ij.y) == gamma)
+        {
+            lbvh_nodes_buffer[idx].left_idx += face_total_count - 1;
+        }
+        if (max(ij.x, ij.y) == gamma + 1)
+        {
+            lbvh_nodes_buffer[idx].right_idx += face_total_count - 1;
+        }
+        lbvh_nodes_buffer[lbvh_nodes_buffer[idx].left_idx].parent_idx = idx;
+        lbvh_nodes_buffer[lbvh_nodes_buffer[idx].right_idx].parent_idx = idx;
+    }
+}
+
+/**
+ * 计算LBVH内部的AABB节点
+ * @param id 线程ID
+ */
+[numthreads(BLOCK_SIZE,1,1)]
+void compute_internal_aabbs(uint3 id : SV_DispatchThreadID)
+{
+    int idx = id.x;
+    const int internal_node_count = face_total_count - 1;
+    if (idx < face_total_count)
+    {
+        idx += internal_node_count;
+        uint parent = lbvh_nodes_buffer[idx].parent_idx;
+        while (parent != 0xffffffff)
+        {
+            int old;
+            InterlockedCompareExchange(face_flags_buffer[parent], 0, 1, old);
+            if (old == 0)
+            {
+                return;
+            }
+            const uint l_idx = lbvh_nodes_buffer[parent].left_idx;
+            const uint r_idx = lbvh_nodes_buffer[parent].right_idx;
+            const lbvh_aabb l_box = lbvh_aabbs_buffer[l_idx];
+            const lbvh_aabb r_box = lbvh_aabbs_buffer[r_idx];
+            lbvh_aabbs_buffer[parent] = merge_aabb(l_box, r_box);
+
+            // 更新父节点
+            parent = lbvh_nodes_buffer[parent].parent_idx;
+        }
+    }
+}
+
+
+/**
+ * 查询碰撞对
+ * @param id 线程ID
+ */
+groupshared uint shared_query_collision_in[128];
+groupshared uint shared_query_collision_global_offset[1];
+
+[numthreads(BLOCK_SIZE,1,1)]
+void query_collision_pairs(uint3 id : SV_DispatchThreadID, uint3 g_tid : SV_GroupThreadID)
+{
+    const int max_collision_per_node = 64;
+    const int block_size = 64;
+    const int internal_nodes_count = face_total_count - 1;
+    const int pad = 1;
+    uint num_found = 0;
+    uint thread_pairs[max_collision_per_node];
+    uint idx = id.x;
+    if (idx < face_total_count)
+    {
+        uint stack[64];
+        uint stack_idx = 0;
+        stack[stack_idx++] = 0xffffffff;
+        uint node = 0;
+        do
+        {
+            const uint l_idx = lbvh_nodes_buffer[node].left_idx;
+            const uint r_idx = lbvh_nodes_buffer[node].right_idx;
+
+            const bool overlap_l = intersects_aabb(triangle_aabbs_buffer[idx], lbvh_aabbs_buffer[l_idx]);
+            const bool overlap_r = intersects_aabb(triangle_aabbs_buffer[idx], lbvh_aabbs_buffer[r_idx]);
+            const bool is_leaf_l = l_idx >= internal_nodes_count;
+            const bool is_leaf_r = r_idx >= internal_nodes_count;
+            if (overlap_l && is_leaf_l)
+            {
+                const uint leaf_idx = l_idx - internal_nodes_count;
+                if (num_found < max_collision_per_node && idx < sorted_indices_buffer[leaf_idx])
+                {
+                    thread_pairs[num_found++] = sorted_indices_buffer[leaf_idx];
+                }
+            }
+            if (overlap_r && is_leaf_r)
+            {
+                const uint leaf_idx = r_idx - internal_nodes_count;
+                if (num_found < max_collision_per_node && idx < sorted_indices_buffer[leaf_idx])
+                {
+                    thread_pairs[num_found++] = sorted_indices_buffer[leaf_idx];
+                }
+            }
+
+            bool traverse_l = (overlap_l && !is_leaf_l);
+            bool traverse_r = (overlap_r && !is_leaf_r);
+
+            if (!traverse_l && !traverse_r)
+                node = stack[--stack_idx];
+            else
+            {
+                node = (traverse_l) ? l_idx : r_idx;
+                if (traverse_l && traverse_r)
+                    stack[stack_idx++] = r_idx;
+            }
+        }
+        while (node != 0xffffffff);
+    }
+
+    const uint thread_id = g_tid.x;
+    uint offset = 1;
+    shared_query_collision_in[get_shared_index(thread_id)] = num_found;
+
+    for (int d = block_size >> 1; d > 0; d >>= 1)
+    {
+        GroupMemoryBarrierWithGroupSync();
+        if (thread_id < d)
+        {
+            const uint ai = offset * (2 * thread_id + 1) - 1;
+            const uint bi = offset * (2 * thread_id + 2) - 1;
+            shared_query_collision_in[get_shared_index(bi)] += shared_query_collision_in[get_shared_index(ai)];
+        }
+        offset <<= 1;
+    }
+    if (thread_id == 0)
+    {
+        shared_query_collision_in[get_shared_index(block_size - 1)] = 0;
+    }
+    for (int d = 1; d < block_size; d <<= 1)
+    {
+        offset >>= 1;
+        GroupMemoryBarrierWithGroupSync();
+        if (thread_id < d)
+        {
+            const uint ai = offset * (2 * thread_id + 1) - 1;
+            const uint bi = offset * (2 * thread_id + 2) - 1;
+            const uint t = shared_query_collision_in[get_shared_index(ai)];
+            shared_query_collision_in[get_shared_index(ai)] = shared_query_collision_in[get_shared_index(bi)];
+            shared_query_collision_in[get_shared_index(bi)] += t;
+        }
+    }
+
+    if (thread_id == 0)
+    {
+        int original_value;
+        InterlockedAdd(total_pairs_buffer[0], shared_query_collision_in[block_size - 1], original_value);
+        shared_query_collision_global_offset[0] = original_value;
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    if (num_found > 0)
+    {
+        const uint thread_offset = shared_query_collision_global_offset[0] +
+            shared_query_collision_in[get_shared_index(thread_id)] - num_found;
+        uint i = 0;
+        while (thread_offset + i < max_collision_pairs && i < num_found)
+        {
+            collision_pairs_buffer[thread_offset + i] = uint2(idx, thread_pairs[i]);
+            i++;
+        }
+    }
+}
+
+/**
+ * 查询碰撞三角面
+ * @param id 线程ID
+ */
+[numthreads(BLOCK_SIZE,1,1)]
+void query_collision_triangles(uint3 id : SV_DispatchThreadID)
+{
+    int idx = id.x;
+    if (idx < total_pairs_buffer[0])
+    {
+        const int f0 = collision_pairs_buffer[idx].x;
+        const int f1 = collision_pairs_buffer[idx].y;
+        const int v00 = face_indices_buffer[f0 * 3];
+        const int v01 = face_indices_buffer[f0 * 3 + 1];
+        const int v02 = face_indices_buffer[f0 * 3 + 2];
+        const int v10 = face_indices_buffer[f1 * 3];
+        const int v11 = face_indices_buffer[f1 * 3 + 1];
+        const int v12 = face_indices_buffer[f1 * 3 + 2];
+
+        if (v00 == v10 || v00 == v11 || v00 == v12 ||
+            v01 == v10 || v01 == v11 || v01 == v12 ||
+            v02 == v10 || v02 == v11 || v02 == v12)
+            return;
+
+
+        // TODO(changyu): only consider obj-obj collision now...
+        // 只考虑了不同物体之间的碰撞。同一个物体不同位置的碰撞还没有实现
+        if (vert_group_buffer[v00] == vert_group_buffer[v10])
+        {
+            return;
+        }
+
+        add_collision_pairs(vertices_x_buffer, exact_collision_pairs_buffer, total_exact_pairs_buffer, v00, v10, v11,
+                            v12, collision_detection_dist);
+        add_collision_pairs(vertices_x_buffer, exact_collision_pairs_buffer, total_exact_pairs_buffer, v01, v10, v11,
+                            v12, collision_detection_dist);
+        add_collision_pairs(vertices_x_buffer, exact_collision_pairs_buffer, total_exact_pairs_buffer, v02, v10, v11,
+                            v12, collision_detection_dist);
+        add_collision_pairs(vertices_x_buffer, exact_collision_pairs_buffer, total_exact_pairs_buffer, v10, v00, v01,
+                            v02, collision_detection_dist);
+        add_collision_pairs(vertices_x_buffer, exact_collision_pairs_buffer, total_exact_pairs_buffer, v11, v00, v01,
+                            v02, collision_detection_dist);
+        add_collision_pairs(vertices_x_buffer, exact_collision_pairs_buffer, total_exact_pairs_buffer, v12, v00, v01,
+                            v02, collision_detection_dist);
+    }
+}
+
+
+groupshared lbvh_aabb aabb_shared_data[512];
+
+/// 
+/// @param tid 当前线程局部ID
+/// @param block_size 线程块大小
+/// @param block_idx 线程块ID
+inline void aabb_reduce(int tid, const int block_size, int block_idx)
+{
+    int i = block_idx * block_size * 2 + tid;
+    int grid_size = block_size * 2 * aabb_grid_size;
+    //初始化为最值
+    aabb_shared_data[tid].lower = asfloat(0x7f7fffff);
+    aabb_shared_data[tid].upper = asfloat(0xff7fffff);
+    while (i < face_total_count)
+    {
+        // 合并当前线程处理的两个 AABB（i 和 i+blockSize）
+        aabb_shared_data[tid] = merge_aabb(aabb_shared_data[tid], triangle_aabbs_buffer[i]);
+        if (i + block_size < face_total_count)
+        {
+            aabb_shared_data[tid] = merge_aabb(aabb_shared_data[tid], triangle_aabbs_buffer[i + block_size]);
+        }
+        i += grid_size; // 处理下一批数据
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (block_size >= 512)
+    {
+        if (tid < 256) { aabb_shared_data[tid] = merge_aabb(aabb_shared_data[tid], aabb_shared_data[tid + 256]); }
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (block_size >= 256)
+    {
+        if (tid < 128) { aabb_shared_data[tid] = merge_aabb(aabb_shared_data[tid], aabb_shared_data[tid + 128]); }
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (block_size >= 128)
+    {
+        if (tid < 64) { aabb_shared_data[tid] = merge_aabb(aabb_shared_data[tid], aabb_shared_data[tid + 64]); }
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (block_size >= 64)
+    {
+        if (tid < 32) { aabb_shared_data[tid] = merge_aabb(aabb_shared_data[tid], aabb_shared_data[tid + 32]); }
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (block_size >= 32)
+    {
+        if (tid < 16) { aabb_shared_data[tid] = merge_aabb(aabb_shared_data[tid], aabb_shared_data[tid + 16]); }
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (block_size >= 16)
+    {
+        if (tid < 8) { aabb_shared_data[tid] = merge_aabb(aabb_shared_data[tid], aabb_shared_data[tid + 8]); }
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (block_size >= 8)
+    {
+        if (tid < 4) { aabb_shared_data[tid] = merge_aabb(aabb_shared_data[tid], aabb_shared_data[tid + 4]); }
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (block_size >= 4)
+    {
+        if (tid < 2) { aabb_shared_data[tid] = merge_aabb(aabb_shared_data[tid], aabb_shared_data[tid + 2]); }
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (block_size >= 2)
+    {
+        if (tid < 1) { aabb_shared_data[tid] = merge_aabb(aabb_shared_data[tid], aabb_shared_data[tid + 1]); }
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (tid == 0)
+    {
+        partial_aabb_buffer[block_idx] = aabb_shared_data[0];
+    }
+}
+
+[numthreads(512,1,1)]
+void aabb_reduce_512(uint3 gid : SV_GroupID, uint3 g_tid : SV_GroupThreadID)
+{
+    aabb_reduce(g_tid.x, 512, gid.x);
+}
+
+[numthreads(256,1,1)]
+void aabb_reduce_256(uint3 gid : SV_GroupID, uint3 g_tid : SV_GroupThreadID)
+{
+    aabb_reduce(g_tid.x, 256, gid.x);
+}
+
+[numthreads(128,1,1)]
+void aabb_reduce_128(uint3 gid : SV_GroupID, uint3 g_tid : SV_GroupThreadID)
+{
+    aabb_reduce(g_tid.x, 128, gid.x);
+}
+
+[numthreads(64,1,1)]
+void aabb_reduce_64(uint3 gid : SV_GroupID, uint3 g_tid : SV_GroupThreadID)
+{
+    aabb_reduce(g_tid.x, 64, gid.x);
+}
+
+[numthreads(32,1,1)]
+void aabb_reduce_32(uint3 gid : SV_GroupID, uint3 g_tid : SV_GroupThreadID)
+{
+    aabb_reduce(g_tid.x, 32, gid.x);
+}
+
+[numthreads(16,1,1)]
+void aabb_reduce_16(uint3 gid : SV_GroupID, uint3 g_tid : SV_GroupThreadID)
+{
+    aabb_reduce(g_tid.x, 16, gid.x);
+}
+
+[numthreads(8,1,1)]
+void aabb_reduce_8(uint3 gid : SV_GroupID, uint3 g_tid : SV_GroupThreadID)
+{
+    aabb_reduce(g_tid.x, 8, gid.x);
+}
+
+[numthreads(4,1,1)]
+void aabb_reduce_4(uint3 gid : SV_GroupID, uint3 g_tid : SV_GroupThreadID)
+{
+    aabb_reduce(g_tid.x, 4, gid.x);
+}
+
+[numthreads(2,1,1)]
+void aabb_reduce_2(uint3 gid : SV_GroupID, uint3 g_tid : SV_GroupThreadID)
+{
+    aabb_reduce(g_tid.x, 2, gid.x);
+}
+
+[numthreads(1,1,1)]
+void aabb_reduce_1(uint3 gid : SV_GroupID, uint3 g_tid : SV_GroupThreadID)
+{
+    aabb_reduce(g_tid.x, 1, gid.x);
 }

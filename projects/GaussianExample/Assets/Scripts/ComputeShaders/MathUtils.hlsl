@@ -1,3 +1,7 @@
+# ifndef _MATHUTILS_
+# define _MATHUTILS_
+
+
 #include  "SifakisSVD.hlsl"
 // 数学计算功能文件
 const float m_sqrt3 = 1.73205080756887729352744634151;
@@ -53,18 +57,6 @@ inline float determinant_2x2(const float a, const float b, const float c, const 
     return a * d - b * c;
 }
 
-
-/**
- * 计算3x3行列式
- * @param m 矩阵
- * @return 矩阵的行列式值
- */
-inline float determinant_3x3(const float3x3 m)
-{
-    return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
-        - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
-        + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
-}
 
 /**
  * 计算3x3行列式
@@ -153,7 +145,7 @@ inline void adjoint_3x3(inout float m[3][3], inout float adj[3][3])
 // 主求逆函数
 inline float3x3 inverse_3x3(const float3x3 m)
 {
-    const float det = determinant_3x3(m);
+    const float det = determinant(m);
     const float3x3 adj = adjoint_3x3(m);
     return adj / det; // 伴随矩阵除以行列式
 }
@@ -642,3 +634,227 @@ inline void ssvd3x3(const in float A[3][3], inout float U[3][3], inout float sig
         sigma[2][2] = -sigma[2][2]; // 修正 sigma 的最后一个奇异值[1](@ref)
     }
 }
+
+
+/**
+    执行二维对称矩阵的 LDLT 分解并求解线性系统 Ax=b
+    函数通过 LDLT 分解将对称矩阵分解为下三角矩阵和对角矩阵：
+        分解过程：A = L * D * L^T
+        前向代入：Ly = b
+        后向代入：DL^T x = y
+    该方法避免了平方根运算，适用于实时物理模拟等性能敏感场景
+    @param A00 对称矩阵 A 的 (0,0) 元素
+    @param A01 对称矩阵 A 的 (0,1) 元素（等同于 A10）
+    @param A11 对称矩阵 A 的 (1,1) 元素
+    @param b0 右侧向量 b 的第一个分量
+    @param b1 右侧向量 b 的第二个分量
+    @param x0 输出解向量的第一个分量（通过 inout 参数返回）
+    @param x1 输出解向量的第二个分量（通过 inout 参数返回）
+*/
+inline void solve_ldlt_2d(
+    float A00, float A01, float A11,
+    float b0, float b1,
+    inout float x0, inout float x1)
+{
+    // LDLT 分解核心计算流程[4](@ref)
+    float D00 = A00;
+    float L01 = A01 / D00;
+    float D11 = A11 - L01 * L01 * D00;
+
+    // 前向代入
+    float y0 = b0;
+    float y1 = b1 - L01 * y0;
+
+    // 后向代入
+    x1 = y1 / D11;
+    x0 = (y0 - D00 * L01 * x1) / D00;
+}
+
+/**
+    计算点到三角形的最短距离类型（基于投影参数分析）
+    算法核心流程：
+            构建三角形局部坐标系，计算法向量 nVec
+            三次投影检测：分别将点投影到三条边的正交基空间
+            通过 LDLT 求解投影参数，判断参数区间确定最近点类型
+    该方法结合几何投影与数值求解，适用于碰撞检测和最近邻查询
+    @param p 待测点的三维坐标（float3 类型）
+    @param t0 三角形第一个顶点的三维坐标（float3 类型）
+    @param t1 三角形第二个顶点的三维坐标（float3 类型）
+    @param t2 三角形第三个顶点的三维坐标（float3 类型）
+    @return int 返回最近点类型代码：
+    0-2: 最近点为顶点(t0/t1/t2)
+    3-5: 最近点在边(t0t1/t1t2/t2t0)
+    6: 最近点在三角形内部
+*/
+inline int point_triangle_distance_type(const float3 p, const float3 t0, const float3 t1, const float3 t2)
+{
+    // 投影参数计算
+    float2 param_col0, param_col1, param_col2;
+    // 初始化基向量与法线计算
+    float3 basis_row0 = t1 - t0;
+    float3 basis_row1 = t2 - t0;
+    const float3 n_vec = cross(basis_row0, basis_row1);
+
+    // 第一次投影判定
+    basis_row1 = cross(basis_row0, n_vec);
+    float4 sys = float4(
+        dot(basis_row0, basis_row0),
+        dot(basis_row0, basis_row1),
+        dot(basis_row0, basis_row1), // sys[2] 与 sys[1] 相同
+        dot(basis_row1, basis_row1)
+    );
+    float3 b = p - t0;
+    float2 rhs = float2(dot(basis_row0, b), dot(basis_row1, b));
+    solve_ldlt_2d(sys[0], sys[1], sys[3], rhs.x, rhs.y, param_col0.x, param_col0.y);
+    if (param_col0.x > 0.0f && param_col0.x < 1.0f && param_col0.y >= 0.0f)
+    {
+        return 3; // PE t0t1
+    }
+
+    // 第二次投影判定
+    basis_row0 = t2 - t1;
+    basis_row1 = cross(basis_row0, n_vec);
+    sys = float4(
+        dot(basis_row0, basis_row0),
+        dot(basis_row0, basis_row1),
+        dot(basis_row0, basis_row1), // sys[2] 与 sys[1] 相同
+        dot(basis_row1, basis_row1)
+    );
+    b = p - t1;
+    rhs = float2(dot(basis_row0, b), dot(basis_row1, b));
+    solve_ldlt_2d(sys[0], sys[1], sys[3], rhs.x, rhs.y, param_col1.x, param_col1.y);
+    if (param_col1.x > 0.0f && param_col1.x < 1.0f && param_col1.y >= 0.0f)
+    {
+        return 4; // PE t1t2
+    }
+
+    // 第三次投影判定
+    basis_row0 = t0 - t2;
+    basis_row1 = cross(basis_row0, n_vec);
+    sys = float4(
+        dot(basis_row0, basis_row0),
+        dot(basis_row0, basis_row1),
+        dot(basis_row0, basis_row1), // sys[2] 与 sys[1] 相同
+        dot(basis_row1, basis_row1)
+    );
+    b = p - t2;
+    rhs = float2(dot(basis_row0, b), dot(basis_row1, b));
+    solve_ldlt_2d(sys[0], sys[1], sys[3], rhs.x, rhs.y, param_col2.x, param_col2.y);
+    if (param_col2.x > 0.0f && param_col2.x < 1.0f && param_col2.y >= 0.0f)
+    {
+        return 5; // PE t2t0
+    }
+    if (param_col0.x <= 0.0f && param_col2.x >= 1.0f)
+    {
+        return 0; // PP t0
+    }
+    if (param_col1.x <= 0.0f && param_col0.x >= 1.0f)
+    {
+        return 1; // PP t1
+    }
+    if (param_col2.x <= 0.0f && param_col1.x >= 1.0f)
+    {
+        return 2; // PP t2
+    }
+
+    return 6; //PT
+}
+
+/**
+ * 计算两点间平方距离 (支持2D/3D空间)
+ * @param a 点A坐标 (float3类型)
+ * @param b 点B坐标 (float3类型)
+ * @param dim 空间维度 (默认3维)
+ * @return 两点间平方距离 (float类型)
+ *
+ * 算法原理[7,8](@ref)：
+ * 1. 计算各坐标轴分量的差值平方
+ * 2. 累加各分量平方和得到欧氏距离平方
+ * 该实现避免了开方运算，适用于需要距离比较的场景
+ */
+float point_point_distance(const float3 a, const float3 b, const int dim = 3)
+{
+    float dist = 0;
+    for (int i = 0; i < dim; i++)
+        dist += pow(a[i] - b[i], 2);
+    return dist;
+}
+
+/**
+ * 计算点到直线的平方距离 (支持2D/3D空间)
+ * @param p 目标点坐标 (float3类型)
+ * @param e0 直线起点 (float3类型)
+ * @param e1 直线终点 (float3类型) 
+ * @param dim 空间维度 (默认3维)
+ * @return 点到直线的平方距离 (float类型)
+ *
+ * 算法原理：
+ * 2D：利用向量叉积计算垂距公式
+ * 3D：通过向量叉积计算平行四边形面积，再除以底边长度
+ */
+float point_line_distance(float3 p, float3 e0, float3 e1, const int dim = 3)
+{
+    if (dim == 2)
+    {
+        float2 e0_e1 = e1.xy - e0.xy;
+        const float numerator = e0_e1.y * p.x - e0_e1.x * p.y + e1.x * e0.y - e1.y * e0.x;
+        return numerator * numerator / dot(e0_e1, e0_e1);
+    }
+    const float3 pe0 = e0 - p;
+    const float3 pe1 = e1 - p;
+    const float3 e0_e1 = e1 - e0;
+    const float3 nor = cross(pe0, pe1);
+    return dot(nor, nor) / dot(e0_e1, e0_e1);
+}
+
+/**
+ * 计算点到平面的平方距离
+ * @param p 目标点坐标 (float3类型)
+ * @param t0 平面基准点1 (float3类型)
+ * @param t1 平面基准点2 (float3类型) 
+ * @param t2 平面基准点3 (float3类型)
+ * @return 点到平面的平方距离 (float类型)
+ *
+ * 算法原理：
+ * 1. 通过平面三点计算法向量
+ * 2. 利用点积计算投影距离
+ * 3. 应用平面方程简化计算，避免除法运算
+ */
+float point_plane_distance(float3 p, float3 t0, float3 t1, float3 t2)
+{
+    const float3 t0_t1 = t1 - t0;
+    const float3 t0_t2 = t2 - t0;
+    const float3 t0_p = p - t0;
+    const float3 b = cross(t0_t1, t0_t2);
+    const float a_tb = dot(t0_p, b);
+    return a_tb * a_tb / dot(b, b);
+}
+
+/**
+ * 计算点到三角形的最短平方距离
+ * @param p 目标点坐标 (float3类型)
+ * @param t0 三角形顶点1 (float3类型)
+ * @param t1 三角形顶点2 (float3类型)
+ * @param t2 三角形顶点3 (float3类型)
+ * @return 最短平方距离 (float类型)
+ *
+ * 算法原理：
+ * 1. 调用 point_triangle_distance_type 确定最近点类型
+ * 2. 根据类型选择点-点/点-线/点-面距离计算
+ */
+float point_triangle_distance(const float3 p, const float3 t0, const float3 t1, const float3 t2)
+{
+    const int type = point_triangle_distance_type(p, t0, t1, t2);
+    switch (type)
+    {
+    case 0: return point_point_distance(p, t0);
+    case 1: return point_point_distance(p, t1);
+    case 2: return point_point_distance(p, t2);
+    case 3: return point_line_distance(p, t0, t1);
+    case 4: return point_line_distance(p, t1, t2);
+    case 5: return point_line_distance(p, t2, t0);
+    case 6: return point_plane_distance(p, t0, t1, t2);
+    default: return 1e20f;
+    }
+}
+#endif

@@ -363,8 +363,7 @@ namespace GSTestScene
             BindSelectModeInput();
             BindSimulateInput();
         }
-
-
+        
         /// <summary>
         /// 在这里面进行相机移动
         /// </summary>

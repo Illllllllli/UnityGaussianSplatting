@@ -3,10 +3,9 @@
 #pragma kernel radix_global_shuffle
 #pragma kernel radix_blelloch_pre_scan
 #pragma kernel radix_blelloch_add_block_sums
-
+#include "SimulateUtils.hlsl"
 #define BLOCK_SIZE 128
 const int max_element_per_block = BLOCK_SIZE;
-const int log_num_banks = 5;
 
 // 线程网格大小
 int grid_size;
@@ -46,6 +45,7 @@ groupshared uint s_scan_mask_out_sums[4];
  */
 inline uint extract2_bit(uint2 key, const uint shift)
 {
+    // x存储低位，y存储高位
     if (shift < 32 - 2)
     {
         return (key.x >> shift) & 3;
@@ -198,16 +198,6 @@ int blelloch_block_sums_buffer_offset;
 int blelloch_length;
 
 
-inline uint conflict_free_offset(const uint n)
-{
-    return n >> log_num_banks;
-}
-
-inline uint get_shared_index(const uint n)
-{
-    return n + conflict_free_offset(n);
-}
-
 [numthreads(BLOCK_SIZE/2,1,1)]
 void radix_blelloch_pre_scan(uint3 gid : SV_GroupID, uint3 g_tid : SV_GroupThreadID)
 {
@@ -244,7 +234,7 @@ void radix_blelloch_pre_scan(uint3 gid : SV_GroupID, uint3 g_tid : SV_GroupThrea
             int bi = offset * ((thread_id << 1) + 2) - 1;
             ai += conflict_free_offset(ai);
             bi += conflict_free_offset(bi);
-
+            
             pre_scan_shared_data[bi] += pre_scan_shared_data[ai];
         }
         offset <<= 1;

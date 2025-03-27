@@ -1,4 +1,5 @@
 ﻿using System.Runtime.InteropServices;
+using Unity.Mathematics;
 using UnityEngine;
 
 namespace GSTestScene.Simulation
@@ -9,8 +10,18 @@ namespace GSTestScene.Simulation
     [StructLayout(LayoutKind.Sequential)]
     public struct LbvhAABBBoundingBox
     {
-        public Vector4 upper;
-        public Vector4 lower; 
+        public float4 upper;
+        public float4 lower;
+
+        public static LbvhAABBBoundingBox Merge(LbvhAABBBoundingBox a, LbvhAABBBoundingBox b)
+        {
+            LbvhAABBBoundingBox mergedBox = new LbvhAABBBoundingBox
+            {
+                lower = Vector4.Min(a.lower, b.lower),
+                upper = Vector4.Max(a.upper, b.upper)
+            };
+            return mergedBox;
+        }
     }
 
     /// <summary>
