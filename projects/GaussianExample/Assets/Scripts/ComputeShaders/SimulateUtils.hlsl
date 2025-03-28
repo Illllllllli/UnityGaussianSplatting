@@ -90,6 +90,12 @@ inline void store_gs_scale(inout RWStructuredBuffer<uint> buffer, const float3 s
     buffer[start_index + 2] = scale_uint3[2];
 }
 
+/**
+ * 从缓冲区对应索引读取float3x3矩阵
+ * @param buffer 缓冲区
+ * @param index 矩阵索引(以float3x3计)
+ * @return 对应索引的矩阵
+ */
 inline float3x3 load_matrix_float(const RWStructuredBuffer<float> buffer, const int index)
 {
     float3x3 result;
@@ -143,6 +149,26 @@ inline void atomic_add_float(inout RWStructuredBuffer<uint> float_buffer, const 
         const float new_float = current_float + value;
         const uint new_uint = asuint(new_float); // float 转二进制
         InterlockedCompareExchange(float_buffer[index], current, new_uint, original);
+    }
+    while (original != current);
+}
+
+/**
+ * 对浮点缓冲区的原子加法
+ * @param float_buffer 以uint3存储的浮点缓冲区
+ * @param index 两级索引
+ * @param value 增加值
+ */
+inline void atomic_add_float(inout RWStructuredBuffer<uint3> float_buffer, const int2 index, const float value)
+{
+    uint current, original;
+    do
+    {
+        current = float_buffer[index[0]][index[1]];
+        const float current_float = asfloat(current); // 二进制转 float
+        const float new_float = current_float + value;
+        const uint new_uint = asuint(new_float); // float 转二进制
+        InterlockedCompareExchange(float_buffer[index[0]][index[1]], current, new_uint, original);
     }
     while (original != current);
 }
@@ -334,7 +360,7 @@ inline uint find_split(const RWStructuredBuffer<uint2> node_code_buffer, const i
 /// 精确碰撞检测的辅助函数 ///
 inline void add_collision_pairs(inout RWStructuredBuffer<float3> vert_buffer,
                                 inout RWStructuredBuffer<int4> exact_collision_buffer,
-                                inout RWStructuredBuffer<int> total_collisions_paiir_buffer,
+                                inout RWStructuredBuffer<int> total_collisions_pair_buffer,
                                 const int p, const int p0, int p1, int p2, const float minimal_dist)
 {
     const float3 vert_p = vert_buffer[p];
@@ -344,7 +370,7 @@ inline void add_collision_pairs(inout RWStructuredBuffer<float3> vert_buffer,
     if (point_triangle_distance(vert_p, vert_p0, vert_p1, vert_p2) < minimal_dist)
     {
         int pair_idx;
-        InterlockedAdd(total_collisions_paiir_buffer[0], 1, pair_idx);
+        InterlockedAdd(total_collisions_pair_buffer[0], 1, pair_idx);
         if (pair_idx < max_collision_pairs)
         {
             float3 d1 = vert_p1 - vert_p0;

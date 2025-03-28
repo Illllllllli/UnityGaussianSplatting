@@ -68,9 +68,11 @@ namespace GSTestScene.Simulation
         // 碰撞检测的迭代间隔次数
         public float collisionDetectionIterInterval = 100;
 
-        // 切换全局坐标系的上方向
+        // 切换全局坐标系的重力方向.1为重力方向向上
         public int isZUp = 1;
 
+        // 地面高度，限制物体下落的Y坐标
+        public float groundHeight = 0.0f;
 
         // 边界标志位。但不知道具体干什么用
         public int boundary = 0;
@@ -205,7 +207,7 @@ namespace GSTestScene.Simulation
         private ComputeBuffer _globalTetWBuffer; //全局四面体权重缓冲区
 
         // GS相关缓冲区。网格插值用,数据类型保留为原始的uint
-        private ComputeBuffer _gsPosBuffer; //GS位置缓冲区
+        private ComputeBuffer _gsPositionBuffer; //GS位置缓冲区
         private ComputeBuffer _gsOtherBuffer; //GS缩放和旋转缓冲区
 
         // 着色器属性ID
@@ -248,6 +250,8 @@ namespace GSTestScene.Simulation
         private readonly int _dtId = Shader.PropertyToID("dt");
         private readonly int _dampingCoefficientId = Shader.PropertyToID("damping_coefficient");
         private readonly int _zUpId = Shader.PropertyToID("z_up");
+        private readonly int _collisionStiffnessId = Shader.PropertyToID("collision_stiffness");
+        private readonly int _groundHeightId = Shader.PropertyToID("ground_height");
 
         //控制器
         private readonly int _controllerPositionId = Shader.PropertyToID("controller_position");
@@ -257,6 +261,8 @@ namespace GSTestScene.Simulation
 
         //GS
         private readonly int _gsTotalCountId = Shader.PropertyToID("gs_total_count");
+        private readonly int _gsObjectCountId = Shader.PropertyToID("gs_object_count");
+
 
         private readonly int _gsPositionBufferId = Shader.PropertyToID("gs_position_buffer");
         private readonly int _gsOtherBufferId = Shader.PropertyToID("gs_other_buffer");
@@ -372,6 +378,18 @@ namespace GSTestScene.Simulation
         private int aabbReduce2Kernel => simulateShader.FindKernel("aabb_reduce_2");
         private int aabbReduce1Kernel => simulateShader.FindKernel("aabb_reduce_1");
         private int applyExternalForceKernel => simulateShader.FindKernel("apply_external_force");
+        private int solveFemConstraintsKernel => simulateShader.FindKernel("solve_fem_constraints");
+
+        private int solveTrianglePointDistanceConstraintKernel =>
+            simulateShader.FindKernel("solve_triangle_point_distance_constraint");
+
+        private int pbdPostSolveKernel => simulateShader.FindKernel("pbd_post_solve");
+        private int pbdAdvanceKernel => simulateShader.FindKernel("pbd_advance");
+        private int solveRigidInitMassCenterKernel => simulateShader.FindKernel("solve_rigid_init_mass_center");
+        private int solveRigidComputeAKernel => simulateShader.FindKernel("solve_rigid_compute_A");
+        private int solveRigidComputeRKernel => simulateShader.FindKernel("solve_rigid_compute_R");
+        private int solveRigidUpdateXKernel => simulateShader.FindKernel("solve_rigid_update_x");
+        private int applyInterpolationKernel => simulateShader.FindKernel("apply_interpolation");
 
         // 其他默认参数
         private const int ShDegree = 3; //sh阶数
@@ -577,7 +595,7 @@ namespace GSTestScene.Simulation
                         // FEM求解：处理弹性形变
                         using (TimerUtil femTimer = new TimerUtil("Solve FEM Constraints"))
                         {
-                            SolveFemConstraints();
+                            SolveFemConstraints(dt0);
                             totalFemSolveMilliSeconds += femTimer.GetDeltaTime();
                         }
 
@@ -600,7 +618,7 @@ namespace GSTestScene.Simulation
                     // 将子步长的计算结果应用到顶点位置，完成时间步进
                     using (TimerUtil xpbdTimer = new TimerUtil("PBD Advance"))
                     {
-                        PbdAdvance();
+                        PbdAdvance(dt0);
                         totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
                     }
                 }

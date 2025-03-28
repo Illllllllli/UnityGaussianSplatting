@@ -339,7 +339,7 @@ namespace GSTestScene.Simulation
         {
             int gridSize = CeilDivide(_totalGsCount, SimulateBlockSize);
             SetShaderComputeBuffer(simulateShader, getLocalEmbededTetsKernel, _gsPositionBufferId,
-                _gsPosBuffer);
+                _gsPositionBuffer);
             SetShaderComputeBuffer(simulateShader, getLocalEmbededTetsKernel, _covBufferId, _covBuffer);
             SetShaderComputeBuffer(simulateShader, getLocalEmbededTetsKernel, _localTetXBufferId,
                 _localTetXBuffer);
@@ -586,6 +586,7 @@ namespace GSTestScene.Simulation
         /// <summary>
         /// 实际调用GPU应用外力
         /// </summary>
+        /// <param name="dt0">步进时间</param>
         private void ApplyExternalForceCompute(float dt0)
         {
             int gridSize = CeilDivide(_totalVerticesCount, SimulateBlockSize);
@@ -609,6 +610,182 @@ namespace GSTestScene.Simulation
             _commandBuffer.SetComputeIntParam(simulateShader, _zUpId, isZUp);
             _commandBuffer.DispatchCompute(simulateShader, applyExternalForceKernel, gridSize, 1, 1);
         }
+
+        /// <summary>
+        /// 实际调用GPU求解FEM
+        /// </summary>
+        /// <param name="dt0"></param>
+        private void SolveFemConstraintsCompute(float dt0)
+        {
+            int gridSize = CeilDivide(_totalCellsCount, SimulateBlockSize / 2);
+            SetShaderComputeBuffer(simulateShader, solveFemConstraintsKernel, _cellMuBufferId, _cellMuBuffer);
+            SetShaderComputeBuffer(simulateShader, solveFemConstraintsKernel, _cellLambdaBufferId, _cellLambdaBuffer);
+            SetShaderComputeBuffer(simulateShader, solveFemConstraintsKernel, _cellIndicesBufferId, _cellIndicesBuffer);
+            SetShaderComputeBuffer(simulateShader, solveFemConstraintsKernel, _vertNewXBufferId, _vertNewXBuffer);
+            SetShaderComputeBuffer(simulateShader, solveFemConstraintsKernel, _vertInvMassBufferId, _vertInvMassBuffer);
+            SetShaderComputeBuffer(simulateShader, solveFemConstraintsKernel, _cellDsInvBufferId, _cellDsInvBuffer);
+            SetShaderComputeBuffer(simulateShader, solveFemConstraintsKernel, _cellVolumeInitBufferId,
+                _cellVolumeInitBuffer);
+            SetShaderComputeBuffer(simulateShader, solveFemConstraintsKernel, _vertDeltaPosBufferId,
+                _vertDeltaPosBuffer);
+            SetShaderComputeBuffer(simulateShader, solveFemConstraintsKernel, _cellMultiplierBufferId,
+                _cellMultiplierBuffer);
+            SetShaderComputeBuffer(simulateShader, solveFemConstraintsKernel, _rigidVertGroupBufferId,
+                _rigidVertGroupBuffer);
+            _commandBuffer.SetComputeIntParam(simulateShader, _cellTotalCountId, _totalCellsCount);
+            _commandBuffer.SetComputeFloatParam(simulateShader, _dtId, dt0);
+            _commandBuffer.DispatchCompute(simulateShader, solveFemConstraintsKernel, gridSize, 1, 1);
+        }
+
+        /// <summary>
+        /// 实际调用GPU求解三角面碰撞约束
+        /// </summary>
+        private void SolveTrianglePointDistanceConstraintCompute()
+        {
+            int gridSize = CeilDivide(_totalExactPairsCount[0], SimulateBlockSize / 2);
+            SetShaderComputeBuffer(simulateShader, solveTrianglePointDistanceConstraintKernel,
+                _exactCollisionPairsBufferId, _exactCollisionPairsBuffer);
+            SetShaderComputeBuffer(simulateShader, solveTrianglePointDistanceConstraintKernel, _vertNewXBufferId,
+                _vertNewXBuffer);
+            SetShaderComputeBuffer(simulateShader, solveTrianglePointDistanceConstraintKernel, _vertInvMassBufferId,
+                _vertInvMassBuffer);
+            SetShaderComputeBuffer(simulateShader, solveTrianglePointDistanceConstraintKernel, _vertDeltaPosBufferId,
+                _vertDeltaPosBuffer);
+            SetShaderComputeBuffer(simulateShader, solveTrianglePointDistanceConstraintKernel, _totalExactPairsBufferId,
+                _totalExactPairsBuffer);
+            _commandBuffer.SetComputeFloatParam(simulateShader, _collisionDetectionDistId, collisionMinimalDist);
+            _commandBuffer.SetComputeFloatParam(simulateShader, _collisionStiffnessId, collisionStiffness);
+            _commandBuffer.DispatchCompute(simulateShader, solveTrianglePointDistanceConstraintKernel, gridSize, 1, 1);
+        }
+
+        /// <summary>
+        /// 实际调用GPU求解步进过程中的顶点位置更新
+        /// </summary>
+        private void PbdPostSolveCompute()
+        {
+            int gridSize = CeilDivide(_totalVerticesCount, SimulateBlockSize * 4);
+            SetShaderComputeBuffer(simulateShader, pbdPostSolveKernel, _vertDeltaPosBufferId, _vertDeltaPosBuffer);
+            SetShaderComputeBuffer(simulateShader, pbdPostSolveKernel, _vertNewXBufferId, _vertNewXBuffer);
+            SetShaderComputeBuffer(simulateShader, pbdPostSolveKernel, _vertSelectedIndicesBufferId,
+                _vertSelectedIndicesBuffer);
+            _commandBuffer.SetComputeIntParam(simulateShader, _verticesTotalCountId, _totalVerticesCount);
+            _commandBuffer.DispatchCompute(simulateShader, pbdPostSolveKernel, gridSize, 1, 1);
+        }
+
+        /// <summary>
+        /// 实际调用GPU将子步长的计算结果应用到顶点位置，完成时间步进
+        /// </summary>
+        private void PbdAdvanceCompute(float dt0)
+        {
+            int gridSize = CeilDivide(_totalVerticesCount, SimulateBlockSize);
+            SetShaderComputeBuffer(simulateShader, pbdAdvanceKernel, _vertInvMassBufferId, _vertInvMassBuffer);
+            SetShaderComputeBuffer(simulateShader, pbdAdvanceKernel, _vertVelocityBufferId, _vertVelocityBuffer);
+            SetShaderComputeBuffer(simulateShader, pbdAdvanceKernel, _vertxBufferId, _vertxBuffer);
+            SetShaderComputeBuffer(simulateShader, pbdAdvanceKernel, _vertNewXBufferId, _vertNewXBuffer);
+            _commandBuffer.SetComputeIntParam(simulateShader, _verticesTotalCountId, _totalVerticesCount);
+            _commandBuffer.SetComputeIntParam(simulateShader, _zUpId, isZUp);
+            _commandBuffer.SetComputeFloatParam(simulateShader, _dtId, dt0);
+            _commandBuffer.SetComputeFloatParam(simulateShader, _groundHeightId, groundHeight);
+            _commandBuffer.DispatchCompute(simulateShader, pbdAdvanceKernel, gridSize, 1, 1);
+        }
+
+        /// <summary>
+        /// 调用GPU更新刚体质心
+        /// </summary>
+        private void SolveRigidInitMassCenter()
+        {
+            int gridSize = CeilDivide(_totalVerticesCount, SimulateBlockSize);
+            SetShaderComputeBuffer(simulateShader, solveRigidInitMassCenterKernel, _rigidMassCenterBufferId,
+                _rigidMassCenterBuffer);
+            SetShaderComputeBuffer(simulateShader, solveRigidInitMassCenterKernel, _rigidVertGroupBufferId,
+                _rigidVertGroupBuffer);
+            SetShaderComputeBuffer(simulateShader, solveRigidInitMassCenterKernel, _vertxBufferId, _vertxBuffer);
+            SetShaderComputeBuffer(simulateShader, solveRigidInitMassCenterKernel, _vertMassBufferId, _vertMassBuffer);
+            _commandBuffer.SetComputeIntParam(simulateShader, _verticesTotalCountId, _totalVerticesCount);
+            _commandBuffer.DispatchCompute(simulateShader, solveRigidInitMassCenterKernel, gridSize, 1, 1);
+        }
+
+        /// <summary>
+        /// 调用GPU更新刚体角速度矩阵
+        /// </summary>
+        private void SolveRigidComputeA()
+        {
+            int gridSize = CeilDivide(_totalVerticesCount, SimulateBlockSize);
+            SetShaderComputeBuffer(simulateShader, solveRigidComputeAKernel, _rigidAngleVelocityMatrixBufferId,
+                _rigidAngleVelocityMatrixBuffer);
+            SetShaderComputeBuffer(simulateShader, solveRigidComputeAKernel, _rigidVertGroupBufferId,
+                _rigidVertGroupBuffer);
+            SetShaderComputeBuffer(simulateShader, solveRigidComputeAKernel, _rigidMassBufferId,
+                _rigidMassBuffer);
+            SetShaderComputeBuffer(simulateShader, solveRigidComputeAKernel, _rigidMassCenterBufferId,
+                _rigidMassCenterBuffer);
+            SetShaderComputeBuffer(simulateShader, solveRigidComputeAKernel, _rigidMassCenterInitBufferId,
+                _rigidMassCenterInitBuffer);
+            SetShaderComputeBuffer(simulateShader, solveRigidComputeAKernel, _vertxBufferId,
+                _vertxBuffer);
+            SetShaderComputeBuffer(simulateShader, solveRigidComputeAKernel, _vertXBufferId,
+                _vertXBuffer);
+            SetShaderComputeBuffer(simulateShader, solveRigidComputeAKernel, _vertMassBufferId,
+                _vertMassBuffer);
+            _commandBuffer.SetComputeIntParam(simulateShader, _verticesTotalCountId, _totalVerticesCount);
+            _commandBuffer.DispatchCompute(simulateShader, solveRigidComputeAKernel, gridSize, 1, 1);
+        }
+
+        /// <summary>
+        /// 调用GPU更新刚体旋转矩阵
+        /// </summary>
+        private void SolveRigidComputeR()
+        {
+            int gridSize = CeilDivide(_gaussianObjects.Count, SimulateBlockSize);
+            SetShaderComputeBuffer(simulateShader, solveRigidComputeRKernel, _rigidAngleVelocityMatrixBufferId,
+                _rigidAngleVelocityMatrixBuffer);
+            SetShaderComputeBuffer(simulateShader, solveRigidComputeRKernel, _rigidRotationMatrixBufferId,
+                _rigidRotationMatrixBuffer);
+            _commandBuffer.SetComputeIntParam(simulateShader, _verticesTotalCountId, _totalVerticesCount);
+            _commandBuffer.SetComputeIntParam(simulateShader, _gsObjectCountId, _gaussianObjects.Count);
+            _commandBuffer.DispatchCompute(simulateShader, solveRigidComputeRKernel, gridSize, 1, 1);
+        }
+
+        /// <summary>
+        /// 调用GPU更新刚体位置
+        /// </summary>
+        private void SolveRigidUpdateX()
+        {
+            int gridSize = CeilDivide(_totalVerticesCount, SimulateBlockSize);
+            SetShaderComputeBuffer(simulateShader, solveRigidUpdateXKernel, _rigidVertGroupBufferId,
+                _rigidVertGroupBuffer);
+            SetShaderComputeBuffer(simulateShader, solveRigidUpdateXKernel, _rigidRotationMatrixBufferId,
+                _rigidRotationMatrixBuffer);
+            SetShaderComputeBuffer(simulateShader, solveRigidUpdateXKernel, _vertxBufferId, _vertxBuffer);
+            SetShaderComputeBuffer(simulateShader, solveRigidUpdateXKernel, _vertXBufferId, _vertXBuffer);
+            SetShaderComputeBuffer(simulateShader, solveRigidUpdateXKernel, _rigidMassCenterBufferId,
+                _rigidMassCenterBuffer);
+            SetShaderComputeBuffer(simulateShader, solveRigidUpdateXKernel, _rigidMassCenterInitBufferId,
+                _rigidMassCenterInitBuffer);
+            SetShaderComputeBuffer(simulateShader, solveRigidUpdateXKernel, _rigidMassBufferId, _rigidMassBuffer);
+            _commandBuffer.SetComputeIntParam(simulateShader, _verticesTotalCountId, _totalVerticesCount);
+            _commandBuffer.DispatchCompute(simulateShader, solveRigidUpdateXKernel, gridSize, 1, 1);
+        }
+
+        /// <summary>
+        /// 实际调用GPU计算GS网格插值更新结果
+        /// </summary>
+        private void ApplyInterpolationCompute()
+        {
+            int gridSize = CeilDivide(_totalGsCount, SimulateBlockSize);
+            SetShaderComputeBuffer(simulateShader, applyInterpolationKernel, _gsPositionBufferId, _gsPositionBuffer);
+            SetShaderComputeBuffer(simulateShader, applyInterpolationKernel, _gsOtherBufferId, _gsOtherBuffer);
+            SetShaderComputeBuffer(simulateShader, applyInterpolationKernel, _covBufferId, _covBuffer);
+            SetShaderComputeBuffer(simulateShader, applyInterpolationKernel, _cellIndicesBufferId, _cellIndicesBuffer);
+            SetShaderComputeBuffer(simulateShader, applyInterpolationKernel, _vertXBufferId, _vertXBuffer);
+            SetShaderComputeBuffer(simulateShader, applyInterpolationKernel, _vertxBufferId, _vertxBuffer);
+            SetShaderComputeBuffer(simulateShader, applyInterpolationKernel, _globalTetIdxBufferId,
+                _globalTetIdxBuffer);
+            SetShaderComputeBuffer(simulateShader, applyInterpolationKernel, _globalTetWBufferId, _globalTetWBuffer);
+            SetShaderComputeBuffer(simulateShader, applyInterpolationKernel, _localTetWBufferId, _localTetWBuffer);
+            _commandBuffer.SetComputeIntParam(simulateShader, _gsTotalCountId, _totalGsCount);
+            _commandBuffer.DispatchCompute(simulateShader, applyInterpolationKernel, gridSize, 1, 1);
+        }
     }
 
 
@@ -618,14 +795,14 @@ namespace GSTestScene.Simulation
     [Serializable]
     public class MaterialProperty
     {
-        // 物体密度
-        public float density = 1;
+        // 物体密度(kg/m^3)
+        public float density = 1000;
 
-        // 杨氏模量，控制物体的刚度
-        public float E = 2;
+        // 杨氏模量（Pa），控制物体的刚度
+        public float E = 1000;
 
         // 泊松比，描述材料横向压缩与纵向拉伸的比例
-        public float nu = 1;
+        public float nu = 0.3f;
 
         // 标记物体是否为刚体（是否可以发生形变）
         public bool isRigid = false;

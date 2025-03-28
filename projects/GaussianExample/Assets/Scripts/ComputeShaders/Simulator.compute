@@ -16,6 +16,7 @@
 #pragma kernel compute_internal_aabbs
 #pragma kernel query_collision_pairs
 #pragma kernel query_collision_triangles
+
 //根据不同面数情况选择不同线程数量的方法
 #pragma kernel aabb_reduce_512
 #pragma kernel aabb_reduce_256
@@ -27,8 +28,18 @@
 #pragma kernel aabb_reduce_4
 #pragma kernel aabb_reduce_2
 #pragma kernel aabb_reduce_1
-//
+
+/// 物理求解方法
 #pragma kernel apply_external_force
+#pragma kernel solve_fem_constraints
+#pragma kernel solve_triangle_point_distance_constraint
+#pragma kernel pbd_post_solve
+#pragma kernel pbd_advance
+#pragma kernel solve_rigid_init_mass_center
+#pragma kernel solve_rigid_compute_A
+#pragma kernel solve_rigid_compute_R
+#pragma kernel solve_rigid_update_x
+#pragma kernel apply_interpolation
 
 #include "MathUtils.hlsl"
 #include "SimulateUtils.hlsl"
@@ -45,6 +56,9 @@ float gravity; //重力
 float dt; // 模拟的子步长
 float damping_coefficient; // 阻尼系数
 int z_up; // z轴坐标系方向
+float ground_height; //地面高度
+float collision_stiffness; // 碰撞刚度系数
+
 // 控制器参数
 float3 controller_position; //控制器的位置
 float3 controller_velocity; //控制器的速度
@@ -53,6 +67,7 @@ float controller_radius; //控制器影响半径
 
 // 全局GS参数
 int gs_total_count; // GS数量
+int gs_object_count; // GS物体数量
 // GS缓冲区参数
 RWStructuredBuffer<uint3> gs_position_buffer; //gs位置数据
 RWStructuredBuffer<uint> gs_other_buffer; //gs缩放和旋转数据
@@ -82,7 +97,8 @@ RWStructuredBuffer<float> vert_force_buffer; //顶点受力缓冲区
 RWStructuredBuffer<uint> vert_mass_buffer; //顶点质量
 RWStructuredBuffer<float> vert_inv_mass_buffer; //顶点逆质量
 RWStructuredBuffer<float3> vert_new_x_buffer; //顶点新位置缓冲区
-RWStructuredBuffer<float3> vert_delta_pos_buffer; //顶点位移增量缓冲区
+//注意：为了实现原子加法，类型由float3更改为uint3
+RWStructuredBuffer<uint3> vert_delta_pos_buffer; //顶点位移增量缓冲区
 RWStructuredBuffer<int> vert_selected_indices_buffer; //被选中的顶点的索引列表（1为被选中）
 RWStructuredBuffer<int> rigid_vert_group_buffer; //刚体组索引
 RWStructuredBuffer<float> cell_multiplier_buffer; //四面体形变乘数缓冲区
@@ -97,6 +113,8 @@ RWStructuredBuffer<float> cell_lambda_buffer; //四面体拉梅常数缓冲区
 RWStructuredBuffer<uint> rigid_mass_buffer; //刚体质量
 RWStructuredBuffer<uint> rigid_mass_center_init_buffer; //刚体初始质心
 RWStructuredBuffer<uint> rigid_mass_center_buffer; //刚体质心
+RWStructuredBuffer<uint> rigid_angle_velocity_matrix_buffer; // 刚体角速度矩阵
+RWStructuredBuffer<float> rigid_rotation_matrix_buffer; // 刚体旋转矩阵
 
 RWStructuredBuffer<lbvh_aabb> triangle_aabbs_buffer; //排序前的三角面的轴对齐包围盒缓冲区
 RWStructuredBuffer<lbvh_aabb> sorted_triangle_aabbs_buffer; //排序后的三角面轴对齐包围盒缓冲区
@@ -358,7 +376,7 @@ void init_fem_bases(uint3 id : SV_DispatchThreadID)
 }
 
 /**
- * 初始化逆质量.但这是在干什么
+ * 初始化逆质量.
  * @param id 线程ID
  */
 [numthreads(BLOCK_SIZE,1,1)]
@@ -439,8 +457,8 @@ void init_rigid(uint3 id : SV_DispatchThreadID)
 
 
 /// 碰撞检测部分 ///
-
-float collision_detection_dist; //compute_triangle_aabbs和query_collision_triangles共用
+//compute_triangle_aabbs,query_collision_triangles和solve_triangle_point_distance_constraint共用
+float collision_detection_dist;
 int aabb_grid_size; // 线程块总数
 /**
  * 计算三角面AABB包围盒
@@ -533,7 +551,7 @@ void construct_internal_nodes(uint3 id : SV_DispatchThreadID)
     if (idx < internal_nodes_count)
     {
         const uint2 ij = determine_range(sorted_morton_code_buffer, face_total_count, idx);
-        const int gamma = find_split(sorted_morton_code_buffer, face_total_count, ij.x, ij.y);
+        const uint gamma = find_split(sorted_morton_code_buffer, face_total_count, ij.x, ij.y);
         lbvh_nodes_buffer[idx].left_idx = gamma;
         lbvh_nodes_buffer[idx].right_idx = gamma + 1;
         if (min(ij.x, ij.y) == gamma)
@@ -595,11 +613,11 @@ void query_collision_pairs(uint3 id : SV_DispatchThreadID, uint3 g_tid : SV_Grou
 {
     const int max_collision_per_node = 64;
     const int block_size = 64;
-    const int internal_nodes_count = face_total_count - 1;
-    const int pad = 1;
+    const uint internal_nodes_count = uint(face_total_count - 1);
+    // const int pad = 1;
     uint num_found = 0;
     uint thread_pairs[max_collision_per_node];
-    uint idx = id.x;
+    int idx = id.x;
     if (idx < face_total_count)
     {
         uint stack[64];
@@ -618,7 +636,7 @@ void query_collision_pairs(uint3 id : SV_DispatchThreadID, uint3 g_tid : SV_Grou
             if (overlap_l && is_leaf_l)
             {
                 const uint leaf_idx = l_idx - internal_nodes_count;
-                if (num_found < max_collision_per_node && idx < sorted_indices_buffer[leaf_idx])
+                if (num_found < uint(max_collision_per_node) && idx < sorted_indices_buffer[leaf_idx])
                 {
                     thread_pairs[num_found++] = sorted_indices_buffer[leaf_idx];
                 }
@@ -626,7 +644,7 @@ void query_collision_pairs(uint3 id : SV_DispatchThreadID, uint3 g_tid : SV_Grou
             if (overlap_r && is_leaf_r)
             {
                 const uint leaf_idx = r_idx - internal_nodes_count;
-                if (num_found < max_collision_per_node && idx < sorted_indices_buffer[leaf_idx])
+                if (num_found < uint(max_collision_per_node) && idx < sorted_indices_buffer[leaf_idx])
                 {
                     thread_pairs[num_found++] = sorted_indices_buffer[leaf_idx];
                 }
@@ -647,7 +665,7 @@ void query_collision_pairs(uint3 id : SV_DispatchThreadID, uint3 g_tid : SV_Grou
         while (node != 0xffffffff);
     }
 
-    const uint thread_id = g_tid.x;
+    const int thread_id = g_tid.x;
     uint offset = 1;
     shared_query_collision_in[get_shared_index(thread_id)] = num_found;
 
@@ -693,7 +711,7 @@ void query_collision_pairs(uint3 id : SV_DispatchThreadID, uint3 g_tid : SV_Grou
         const uint thread_offset = shared_query_collision_global_offset[0] +
             shared_query_collision_in[get_shared_index(thread_id)] - num_found;
         uint i = 0;
-        while (thread_offset + i < max_collision_pairs && i < num_found)
+        while (thread_offset + i < uint(max_collision_pairs) && i < num_found)
         {
             collision_pairs_buffer[thread_offset + i] = uint2(idx, thread_pairs[i]);
             i++;
@@ -892,21 +910,479 @@ void aabb_reduce_1(uint3 gid : SV_GroupID, uint3 g_tid : SV_GroupThreadID)
  * 应用外力(重力和控制器施加的力)
  * @param id 线程ID
  **/
-[numthreads(256,1,1)]
+[numthreads(BLOCK_SIZE,1,1)]
 void apply_external_force(uint3 id : SV_DispatchThreadID)
 {
-    int idx = id.x;
+    const int idx = id.x;
     if (idx < vertices_total_count)
     {
         if (vert_inv_mass_buffer[idx] > 0)
         {
-            // 应用重力
+            // 应用阻尼作用
             for (int i = 0; i < 3; i++)
             {
                 vert_velocity_buffer[idx * 3 + i] *= exp(-dt * damping_coefficient);
             }
 
-            const float rotation_factor = 0.05f; //旋转因子。虽然目前可能没什么用
+            // const float rotation_factor = 0.05f; //旋转因子。虽然目前可能没什么用
+            // 原版这里有一个什么“固定顶点”。暂时忽略
+            // 应用重力
+            vert_velocity_buffer[idx * 3 + 2] = float(z_up * gravity * dt);
+            // 应用控制器的力
+            // 本来这里会加一个法向速度，但是因为要用到角速度，所以不考虑
+            // float3 dpos = vertices_x_buffer[idx] - controller_position;
+            // float3 new_dpos 
+            for (int i = 0; i < 3; i++)
+            {
+                vert_velocity_buffer[idx * 3 + i] += controller_velocity[i];
+            }
+        }
+        else
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                vert_velocity_buffer[idx * 3 + i] = 0.f;
+            }
+        }
+        // 最后计算新位置
+        const float3 v = float3(vert_velocity_buffer[idx * 3 + 0], vert_velocity_buffer[idx * 3 + 1],
+                                vert_velocity_buffer[idx * 3 + 2]);
+        vert_new_x_buffer[idx] = vertices_x_buffer[idx] + v * dt;
+    }
+}
+
+/**
+ * FEM约束求解
+ * @param id 线程ID
+ **/
+[numthreads(BLOCK_SIZE/2,1,1)]
+void solve_fem_constraints(uint3 id : SV_DispatchThreadID)
+{
+    const int idx = id.x;
+    // 不是刚体
+    if (idx < cell_total_count && rigid_vert_group_buffer[cell_indices_buffer[idx * 4]] < 0)
+    {
+        const float eps = 1e-6f;
+        // 应变与应力计算
+        float3x3 ds;
+        for (int i = 0; i < 3; i++)
+        {
+            ds[i] = vert_new_x_buffer[cell_indices_buffer[idx * 4 + i]] -
+                vert_new_x_buffer[cell_indices_buffer[idx * 4 + 3]];
+        }
+        const float3x3 ds_inv = load_matrix_float(cell_ds_inv_buffer, idx);
+        const float3x3 F = mul(ds, ds_inv);
+        float E[3][3], sigma[3][3];
+        float tr_E;
+        // 奇异值分解（SVD）处理反转
+        // 防止形变梯度奇异（如体积坍缩），提升数值稳定性
+        {
+            float U[3][3], sig[3][3], V[3][3];
+
+            ssvd3x3(F, U, sig, V);
+            // 截断奇异值至安全范围
+            for (int i = 0; i < 3; i++)
+            {
+                const float min_x_val = 0.05f;
+                const float max_x_val = 1.7f;
+                sig[i][i] = min(max(min_x_val, sig[i][i]), max_x_val);
+            }
+
+            float E_diag[3] = {
+                0.5f * (sig[0][0] * sig[0][0] - 1.0f),
+                0.5f * (sig[1][1] * sig[1][1] - 1.0f),
+                0.5f * (sig[2][2] * sig[2][2] - 1.0f)
+            };
+            tr_E = E_diag[0] + E_diag[1] + E_diag[2];
+            sig[0][0] = 2.0f * cell_mu_buffer[idx] * E_diag[0] + cell_lambda_buffer[idx] * tr_E;
+            sig[1][1] = 2.0f * cell_mu_buffer[idx] * E_diag[1] + cell_lambda_buffer[idx] * tr_E;
+            sig[2][2] = 2.0f * cell_mu_buffer[idx] * E_diag[2] + cell_lambda_buffer[idx] * tr_E;
+
+            for (int i = 0; i < 3; ++i)
+            {
+                for (int k = 0; k < 3; ++k)
+                {
+                    E[i][k] = 0;
+                    sigma[i][k] = 0;
+                    for (int j = 0; j < 3; ++j)
+                    {
+                        E[i][k] += U[i][j] * E_diag[j] * V[k][j];
+                        sigma[i][k] += U[i][j] * sig[j][j] * V[k][j];
+                    }
+                }
+            }
+        }
+        // 本构模型与能量计算
+        float psi = 0.0;
+        for (int i = 0; i < 3; i++)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                psi += E[i][j];
+            }
+        }
+        psi = cell_mu_buffer[idx] * psi + 0.5 * cell_lambda_buffer[idx] * tr_E * tr_E;
+
+        // 约束力梯度与求解
+        float H[3][3];
+        for (int i = 0; i < 3; ++i)
+            for (int k = 0; k < 3; ++k)
+            {
+                H[i][k] = 0;
+                for (int j = 0; j < 3; ++j)
+                    H[i][k] += sigma[i][j] * cell_ds_inv_buffer[idx * 9 + k * 3 + j];
+            }
+        for (int i = 0; i < 3; i++)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                H[i][j] *= cell_volume_init_buffer[idx];
+            }
+        }
+        float sum_normGradC = 0.f;
+        for (int i = 0; i < 3; i++)
+        {
+            sum_normGradC += vert_inv_mass_buffer[cell_indices_buffer[idx * 4 + 0]] * H[i][0] * H[i][0];
+            sum_normGradC += vert_inv_mass_buffer[cell_indices_buffer[idx * 4 + 1]] * H[i][1] * H[i][1];
+            sum_normGradC += vert_inv_mass_buffer[cell_indices_buffer[idx * 4 + 2]] * H[i][2] * H[i][2];
+            sum_normGradC += vert_inv_mass_buffer[cell_indices_buffer[idx * 4 + 3]] * (H[i][0] + H[i][1] + H[i][2]) * (H
+                [i][0] + H[i][1] + H[i][2]);
+        }
+
+        const float relaxation_factor = 0.1;
+        #define XPBD
+        #ifdef XPBD
+        // XPBD约束求解
+        // 计算弹性势能
+        const float U = cell_volume_init_buffer[idx] * psi;
+        float C = sqrt(2.0f * U);
+        const float yE = cell_mu_buffer[idx] * (3.0f * cell_lambda_buffer[idx] + 2.0f * cell_mu_buffer[idx]) /
+            (cell_mu_buffer[idx] + cell_lambda_buffer[idx]); //杨氏模量
+        const float alpha = 1.0f / (yE * dt * dt); //柔度系数
+        sum_normGradC += C * C * alpha;
+        float s = -(C * C + C * alpha * cell_multiplier_buffer[idx]) / sum_normGradC;
+        if (sum_normGradC > eps) { cell_multiplier_buffer[idx] -= s; }
+        s *= relaxation_factor;
+        #else
+        const float C = cell_volume_init_buffer[idx] * psi;
+        float s = -C / sum_normGradC * relaxation_factor;
+        #endif
+        // 顶点位移更新
+        if (sum_normGradC > eps)
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                atomic_add_float(vert_delta_pos_buffer, int2(cell_indices_buffer[idx * 4 + 0], i),
+                                 s * vert_inv_mass_buffer[cell_indices_buffer[idx * 4 + 0]] * H[i][0]);
+                atomic_add_float(vert_delta_pos_buffer, int2(cell_indices_buffer[idx * 4 + 1], i),
+                                 s * vert_inv_mass_buffer[cell_indices_buffer[idx * 4 + 1]] * H[i][1]);
+                atomic_add_float(vert_delta_pos_buffer, int2(cell_indices_buffer[idx * 4 + 2], i),
+                                 s * vert_inv_mass_buffer[cell_indices_buffer[idx * 4 + 2]] * H[i][2]);
+                atomic_add_float(vert_delta_pos_buffer, int2(cell_indices_buffer[idx * 4 + 3], i),
+                                 s * vert_inv_mass_buffer[cell_indices_buffer[idx * 4 + 3]] *
+                                 (-H[i][0] - H[i][1] - H[i][2]));
+            }
         }
     }
+}
+
+/**
+ * 三角面碰撞约束求解
+ * 计算点与三角形之间的碰撞约束力，并根据物理参数调整顶点位置，防止穿透。
+ * @param id 线程ID
+ **/
+[numthreads(BLOCK_SIZE/2,1,1)]
+void solve_triangle_point_distance_constraint(uint3 id : SV_DispatchThreadID)
+{
+    const int idx = id.x;
+    if (idx < total_exact_pairs_buffer[0])
+    {
+        const int v = exact_collision_pairs_buffer[idx].x;
+        const int v0 = exact_collision_pairs_buffer[idx].y;
+        const int v1 = exact_collision_pairs_buffer[idx].z;
+        const int v2 = exact_collision_pairs_buffer[idx].w;
+
+        const float3 p = vert_new_x_buffer[v];
+        const float3 p0 = vert_new_x_buffer[v0];
+        const float3 p1 = vert_new_x_buffer[v1];
+        const float3 p2 = vert_new_x_buffer[v2];
+
+        // 计算三角形参数空间投影
+        float b0 = 1.f / 3.f;
+        float b1 = b0;
+        float b2 = b0;
+
+        const float3 d1 = p1 - p0;
+        const float3 d2 = p2 - p0;
+        const float3 pp0 = p - p0;
+        const float a = dot(d1, d1);
+        const float b = dot(d2, d1);
+        const float c = dot(pp0, d1);
+        const float d = b; // dot(d1, d2)
+        const float e = dot(d2, d2);
+        const float f = dot(pp0, d2);
+        const float det = determinant_2x2(a, b, d, e);
+        // 行列式判断是否退化解
+        if (det != 0.f)
+        {
+            // 求解重心坐标 (s,t)
+            const float s = (c * e - b * f) / det;
+            const float t = (a * f - c * d) / det;
+            b0 = 1.0f - s - t; // inside triangle
+            b1 = s;
+            b2 = t;
+            // 处理边界情况（最近点在边或顶点上）...
+            if (b0 < 0.f)
+            {
+                // on edge 1-2
+                const float3 d_edge = p2 - p1;
+                const float3 d_p = p - p1;
+                const float d_edge2 = dot(d_edge, d_edge);
+                float x = (d_edge2 == 0.0f) ? 0.5f : dot(d_edge, d_p) / d_edge2;
+                if (x < 0.0f) x = 0.0f; // on point 1
+                if (x > 1.0f) x = 1.0f; // on point 2
+                b0 = 0.0f;
+                b1 = (1.0f - x);
+                b2 = x;
+            }
+            else if (b1 < 0.f)
+            {
+                // on edge 1-2
+                const float3 d_edge = p0 - p2;
+                const float3 d_p = p - p2;
+                const float d_edge2 = dot(d_edge, d_edge);
+                float x = (d_edge2 == 0.0f) ? 0.5f : dot(d_edge, d_p) / d_edge2;
+                if (x < 0.0f) x = 0.0f; // on point 1
+                if (x > 1.0f) x = 1.0f; // on point 2
+                b1 = 0.0f;
+                b2 = (1.0f - x);
+                b0 = x;
+            }
+            else if (b2 < 0.f)
+            {
+                // on edge 0-1
+                const float3 d_edge = p1 - p0;
+                const float3 d_p = p - p0;
+                const float d_edge2 = dot(d_edge, d_edge);
+                float x = (d_edge2 == 0.0f) ? 0.5f : dot(d_edge, d_p) / d_edge2;
+                if (x < 0.0f) x = 0.0f; // on point 1
+                if (x > 1.0f) x = 1.0f; // on point 2
+                b2 = 0.0f;
+                b0 = (1.0f - x);
+                b1 = x;
+            }
+        }
+        // 碰撞法向量与距离计算
+        // 计算三角形法向量和最近点坐标
+        float3 q; // 最近点坐标
+        for (int i = 0; i < 3; i++)
+        {
+            q[i] = p0[i] * b0 + p1[i] * b1 + p2[i] * b2;
+        }
+        const float3 n = p - q; // 碰撞法向量
+        // const float3 fn = cross(d1, d2);
+
+        const float dist = normalize(n); // 实际距离
+
+        // 约束求解与位移更新
+        const float C = dist - collision_detection_dist; // 约束函数
+
+        if (C < 0.0) // 发生穿透
+        {
+            float s = vert_inv_mass_buffer[v] + vert_inv_mass_buffer[v0] * b0 * b0 + vert_inv_mass_buffer[v1] * b1 * b1
+                + vert_inv_mass_buffer[v2] * b2
+                * b2; // 计算位移缩放因子
+            // 原子操作更新顶点位移
+            if (s > 0.0)
+            {
+                const float relaxation_factor = 1.0;
+                s = C / s * collision_stiffness * relaxation_factor;
+                for (int i = 0; i < 3; i++)
+                {
+                    atomic_add_float(vert_delta_pos_buffer, int2(v, i),
+                                     -s * vert_inv_mass_buffer[v] * n[i]); // grad
+                    atomic_add_float(vert_delta_pos_buffer, int2(v0, i),
+                                     -s * vert_inv_mass_buffer[v0] * (-n[i] * b0)); // grad0
+                    atomic_add_float(vert_delta_pos_buffer, int2(v1, i),
+                                     -s * vert_inv_mass_buffer[v1] * (-n[i] * b1)); // grad1
+                    atomic_add_float(vert_delta_pos_buffer, int2(v2, i),
+                                     -s * vert_inv_mass_buffer[v2] * (-n[i] * b2)); // grad2
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 更新单步PBD模拟后的顶点位置
+ * @param id 线程ID
+ **/
+[numthreads(BLOCK_SIZE*4,1,1)]
+void pbd_post_solve(uint3 id : SV_DispatchThreadID)
+{
+    const int idx = id.x;
+    if (idx < vertices_total_count)
+    {
+        // 只更新没有被选中的顶点
+        if (!vert_selected_indices_buffer[idx])
+        {
+            vert_new_x_buffer[idx] += asfloat(vert_delta_pos_buffer[idx]);
+        }
+    }
+}
+
+/**
+ * 更新PBD一轮步进完成后的顶点位置
+ * @param id 线程ID
+ **/
+[numthreads(BLOCK_SIZE,1,1)]
+void pbd_advance(uint3 id : SV_DispatchThreadID)
+{
+    const int idx = id.x;
+    if (idx < vertices_total_count)
+    {
+        if (vert_inv_mass_buffer[idx] <= 0.f)
+        {
+            vert_new_x_buffer[idx] = vertices_x_buffer[idx];
+        }
+        else
+        {
+            // 约束物体不掉到地面下方/上方
+            if (z_up)
+            {
+                if (vert_new_x_buffer[idx][2] < ground_height)
+                {
+                    vert_new_x_buffer[idx][2] = ground_height;
+                }
+            }
+            else
+            {
+                if (vert_new_x_buffer[idx][2] > ground_height)
+                {
+                    vert_new_x_buffer[idx][2] = ground_height;
+                }
+            }
+            // 更新顶点速度
+            for (int i = 0; i < 3; i++)
+            {
+                vert_velocity_buffer[idx * 3 + i] = (vert_new_x_buffer[idx][i] - vertices_x_buffer[idx][i]) / dt;
+            }
+            //更新顶点位置
+            vertices_x_buffer[idx] = vert_new_x_buffer[idx];
+        }
+    }
+}
+
+/**
+ * 更新刚体质心
+ * @param id 线程ID
+ **/
+[numthreads(BLOCK_SIZE,1,1)]
+void solve_rigid_init_mass_center(uint3 id : SV_DispatchThreadID)
+{
+    const int idx = id.x;
+    if (idx < vertices_total_count && rigid_vert_group_buffer[idx] >= 0)
+    {
+        const int object_id = rigid_vert_group_buffer[idx];
+        for (int i = 0; i < 3; i++)
+        {
+            atomic_add_float(rigid_mass_center_buffer, object_id * 3 + i,
+                             asfloat(vert_mass_buffer[idx]) * vertices_x_buffer[idx]);
+        }
+    }
+}
+
+/**
+ * 更新刚体角速度矩阵
+ * @param id 线程ID
+ **/
+[numthreads(BLOCK_SIZE,1,1)]
+void solve_rigid_compute_A(uint3 id : SV_DispatchThreadID)
+{
+    const int idx = id.x;
+    if (idx < vertices_total_count && rigid_vert_group_buffer[idx] > 0)
+    {
+        const int object_id = rigid_vert_group_buffer[idx];
+        float q_l[3], p_l[3], A[3][3];
+        for (int i = 0; i < 3; i++)
+        {
+            q_l[i] = vertices_X_buffer[idx][i] - (asfloat(rigid_mass_center_init_buffer[object_id * 3 + i]) / asfloat(
+                rigid_mass_buffer[object_id]));
+            p_l[i] = vertices_x_buffer[idx][i] - (asfloat(rigid_mass_center_buffer[object_id * 3 + i]) / asfloat(
+                rigid_mass_buffer[object_id]));
+        }
+        outer_product(p_l, q_l, A);
+        for (int i = 0; i < 3; i++)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                atomic_add_float(rigid_angle_velocity_matrix_buffer, object_id * 9 + i * 3 + j,
+                                 A[i][j] * asfloat(vert_mass_buffer[idx]));
+            }
+        }
+    }
+}
+
+/**
+ * 更新刚体旋转矩阵
+ * @param id 线程ID
+ **/
+[numthreads(BLOCK_SIZE,1,1)]
+void solve_rigid_compute_R(uint3 id : SV_DispatchThreadID)
+{
+    const int idx = id.x;
+    if (idx < gs_object_count)
+    {
+        float A[3][3];
+        for (int i = 0; i < 3; i++)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                A[i][j] = asfloat(rigid_angle_velocity_matrix_buffer[idx * 9 + i * 3 + j]);
+            }
+        }
+        float U[3][3], sigma[3][3], V[3][3];
+        svd3x3(A, U, sigma, V);
+        const float3x3 U_mat = copy_array_to_matrix3x3(U);
+        const float3x3 Vt = transpose(copy_array_to_matrix3x3(V));
+        const float3x3 R = mul(U_mat, Vt);
+        store_matrix_float(R, rigid_rotation_matrix_buffer, idx);
+    }
+}
+
+/**
+ * 更新刚体位置
+ * @param id 线程ID
+ **/
+[numthreads(BLOCK_SIZE,1,1)]
+void solve_rigid_update_x(uint3 id : SV_DispatchThreadID)
+{
+    const int idx = id.x;
+    if (idx < vertices_total_count && rigid_vert_group_buffer[idx] >= 0)
+    {
+        const int object_id = rigid_vert_group_buffer[idx];
+        float3 rest_vec;
+        for (int i = 0; i < 3; i++)
+        {
+            rest_vec[i] = vertices_X_buffer[idx][i] - (asfloat(rigid_mass_center_init_buffer[object_id * 3 + i]) /
+                asfloat(rigid_mass_buffer[object_id]));
+        }
+        const float3 cur_vec = mul(load_matrix_float(rigid_rotation_matrix_buffer, object_id), rest_vec);
+        float3 target;
+        for (int i = 0; i < 3; i++)
+        {
+            target[i] = (asfloat(rigid_mass_center_buffer[object_id * 3 + i]) /
+                asfloat(rigid_mass_buffer[object_id])) + cur_vec[i];
+        }
+        vertices_x_buffer[idx] += (target - vertices_x_buffer[idx]) * 1.0f;
+    }
+}
+
+/**
+ * 实际调用GPU计算GS网格插值更新结果
+ * @param id 线程ID
+ **/
+[numthreads(BLOCK_SIZE,1,1)]
+void apply_interpolation(uint3 id : SV_DispatchThreadID)
+{
 }

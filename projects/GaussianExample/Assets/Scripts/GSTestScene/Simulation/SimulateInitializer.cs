@@ -55,7 +55,7 @@ namespace GSTestScene.Simulation
             {
                 //只有位置相关的缓冲区，stride设为sizeof(float3)
                 // GS相关缓冲区
-                _gsPosBuffer = new ComputeBuffer(_totalGsCount * 3, sizeof(uint)); // position(3)
+                _gsPositionBuffer = new ComputeBuffer(_totalGsCount * 3, sizeof(uint)); // position(3)
                 _gsOtherBuffer = new ComputeBuffer(_totalGsCount * 4, sizeof(uint)); // rotation(1) + scale(3)
                 // 网格相关缓冲区
                 _vertxBuffer = new ComputeBuffer(_totalVerticesCount, sizeof(float) * 3);
@@ -143,7 +143,7 @@ namespace GSTestScene.Simulation
             try
             {
                 // 传递所需GS数据
-                BatchCopyToBuffer(_gsPosBuffer, o => o.gsPositionData, o => o.GsOffset, 3, true);
+                BatchCopyToBuffer(_gsPositionBuffer, o => o.gsPositionData, o => o.GsOffset, 3, true);
                 BatchCopyToBuffer(_gsOtherBuffer, o => o.gsOtherData, o => o.GsOffset, 4);
                 // 传递所需网格数据
                 BatchCopyToBuffer(_vertXBuffer, o => o.VerticesData, o => o.VerticesOffset, 3);
@@ -312,7 +312,7 @@ namespace GSTestScene.Simulation
         /// </summary>
         private void Dispose()
         {
-            _gsPosBuffer?.Dispose();
+            _gsPositionBuffer?.Dispose();
             _gsOtherBuffer?.Dispose();
 
             _vertxBuffer?.Dispose();

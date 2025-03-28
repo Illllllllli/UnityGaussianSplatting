@@ -33,7 +33,7 @@ inline void copy_matrix_to_array3x3(const float3x3 mat, inout float array[3][3])
 /**
  * 从传入的数组指针复制值到向量中
  */
-inline float3 copy_array_to_vector3(inout float array[3])
+inline float3 copy_array_to_vector3(in float array[3])
 {
     return float3(array[0], array[1], array[2]);
 }
@@ -41,11 +41,22 @@ inline float3 copy_array_to_vector3(inout float array[3])
 /**
  * 从传入的数组指针复制值到矩阵中
  */
-inline float3x3 copy_array_to_matrix3(inout float array[3][3])
+inline float3x3 copy_array_to_matrix3x3(in float array[3][3])
 {
     return float3x3(array[0][0], array[0][1], array[0][2],
                     array[1][0], array[1][1], array[1][2],
                     array[2][0], array[2][1], array[2][2]);
+}
+
+void outer_product(in float a[3], in float b[3], inout float array[3][3])
+{
+    for (int i = 0; i < 3; i++)
+    {
+        for (int j = 0; j < 3; j++)
+        {
+            array[i][j] = a[i] * b[j];
+        }
+    }
 }
 
 /**
@@ -593,7 +604,31 @@ inline void svd3x3(const in float A[3][3], inout float U[3][3], inout float sigm
         for (int j = 0; j < 3; j++)
             sigma[i][j] = 0;
     }
-    SVD::svd(
+    svd(
+        A[0][0], A[0][1], A[0][2], A[1][0], A[1][1], A[1][2], A[2][0], A[2][1], A[2][2],
+        U[0][0], U[0][1], U[0][2], U[1][0], U[1][1], U[1][2], U[2][0], U[2][1], U[2][2],
+        V[0][0], V[0][1], V[0][2], V[1][0], V[1][1], V[1][2], V[2][0], V[2][1], V[2][2],
+        sigma[0][0], sigma[1][1], sigma[2][2]
+    );
+}
+
+/**
+ * 计算矩阵 A 的 SVD 分解
+ * @param A 3x3矩阵
+ * @param U 左奇异向量矩阵
+ * @param sigma 奇异值矩阵
+ * @param V 右奇异向量矩阵
+ */
+inline void svd3x3(const in float3x3 A, inout float U[3][3], inout float sigma[3][3], inout float V[3][3])
+{
+    for (int i = 0; i < 3; i++)
+    {
+        for (int j = 0; j < 3; j++)
+        {
+            sigma[i][j] = 0;
+        }
+    }
+    svd(
         A[0][0], A[0][1], A[0][2], A[1][0], A[1][1], A[1][2], A[2][0], A[2][1], A[2][2],
         U[0][0], U[0][1], U[0][2], U[1][0], U[1][1], U[1][2], U[2][0], U[2][1], U[2][2],
         V[0][0], V[0][1], V[0][2], V[1][0], V[1][1], V[1][2], V[2][0], V[2][1], V[2][2],
@@ -611,6 +646,40 @@ inline void svd3x3(const in float A[3][3], inout float U[3][3], inout float sigm
  * @param V 右奇异向量矩阵
  */
 inline void ssvd3x3(const in float A[3][3], inout float U[3][3], inout float sigma[3][3], inout float V[3][3])
+{
+    svd3x3(A, U, sigma, V);
+    // 修正后的代码（适配二维数组）
+    if (determinant_3x3(U) < 0)
+    {
+        // 修正 U 的第三列符号
+        for (int i = 0; i < 3; i++)
+        {
+            U[i][2] *= -1.0f; // 二维数组索引 [i][2]
+        }
+        sigma[2][2] = -sigma[2][2]; // 修正 sigma 的最后一个奇异值[1](@ref)
+    }
+
+    if (determinant_3x3(V) < 0)
+    {
+        // 修正 V 的第三列符号
+        for (int i = 0; i < 3; i++)
+        {
+            V[i][2] *= -1.0f; // 二维数组索引 [i][2]
+        }
+        sigma[2][2] = -sigma[2][2]; // 修正 sigma 的最后一个奇异值[1](@ref)
+    }
+}
+
+/**
+* 在标准 SVD 分解的基础上，确保：
+    1. U 和 V 的行列式为正（即它们是旋转矩阵，属于 SO(3) 群）。
+    2. 通过调整符号保持分解的正确性。
+ * @param A 3x3矩阵
+ * @param U 左奇异向量矩阵
+ * @param sigma 奇异值矩阵
+ * @param V 右奇异向量矩阵
+ */
+inline void ssvd3x3(const in float3x3 A, inout float U[3][3], inout float sigma[3][3], inout float V[3][3])
 {
     svd3x3(A, U, sigma, V);
     // 修正后的代码（适配二维数组）
