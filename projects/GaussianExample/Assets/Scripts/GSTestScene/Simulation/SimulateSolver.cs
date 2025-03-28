@@ -59,8 +59,8 @@
         {
             // 清空缓冲区
             _rigidMassCenterBuffer.SetData(new float[3 * _gaussianObjects.Count]);
-            _rigidMassCenterBuffer.SetData(new float[9 * _gaussianObjects.Count]);
-            _rigidMassCenterBuffer.SetData(new float[9 * _gaussianObjects.Count]);
+            _rigidAngleVelocityMatrixBuffer.SetData(new float[9 * _gaussianObjects.Count]);
+            _rigidRotationMatrixBuffer.SetData(new float[9 * _gaussianObjects.Count]);
             SolveRigidInitMassCenter();
             SubmitTaskAndSynchronize();
             SolveRigidComputeA();
@@ -77,6 +77,8 @@
         /// </summary>
         private void ApplyInterpolation()
         {
+            ApplyInterpolationCompute();
+            SubmitTaskAndSynchronize();
         }
     }
 }

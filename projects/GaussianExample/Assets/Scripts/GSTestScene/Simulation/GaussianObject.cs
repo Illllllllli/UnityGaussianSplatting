@@ -75,7 +75,6 @@ namespace GSTestScene.Simulation
         /// <returns></returns>
         public bool InitializeData(GaussianSplatRenderer renderer, MaterialProperty materialProperty, int gsOffset,
             int verticesOffset, int edgesOffset, int facesOffset, int cellsOffset, int index)
-
         {
             // 初始化属性
             _renderer = renderer;
@@ -276,6 +275,29 @@ namespace GSTestScene.Simulation
                     faces.Remove(key); // 内部面移除
             }
         }
+
+        /// <summary>
+        /// 更新资产的GS相关缓冲块
+        /// </summary>
+        /// <param name="gsPositionBuffer">GS位置数据缓冲块</param>
+        /// <param name="gsOtherBuffer">GS其他（旋转和缩放）数据缓冲块</param>
+        public void UpdateGaussianData(ComputeBuffer gsPositionBuffer, ComputeBuffer gsOtherBuffer)
+        {
+            lock (_renderer.m_GpuPosData)
+            {
+                uint[] posData = new uint[(3 * gsNums + 1)];
+                gsPositionBuffer.GetData(posData, 0, GsOffset * 3, gsNums * 3);
+                _renderer.m_GpuPosData.SetData(posData);
+            }
+
+            lock (_renderer.m_GpuOtherData)
+            {
+                uint[] otherData = new uint[(4 * gsNums)];
+                gsOtherBuffer.GetData(otherData, 0, GsOffset * 4, gsNums * 4);
+                _renderer.m_GpuOtherData.SetData(otherData);
+            }
+        }
+
 
         /// <summary>
         /// 释放所有网格数据

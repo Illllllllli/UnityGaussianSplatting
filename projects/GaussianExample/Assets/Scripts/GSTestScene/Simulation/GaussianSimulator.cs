@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Threading.Tasks;
 using GaussianSplatting.Runtime;
 using StartScene;
 using Unity.Collections;
@@ -10,7 +9,6 @@ using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
-using UnityEngine.Serialization;
 using Debug = UnityEngine.Debug;
 
 namespace GSTestScene.Simulation
@@ -143,8 +141,8 @@ namespace GSTestScene.Simulation
         // 一些网格相关的缓冲区
         // todo:还有一部分没写完
         // 网格数据
-        private ComputeBuffer _vertXBuffer; //todo:X和x可能是所谓两层嵌入的不同顶点？
-        private ComputeBuffer _vertxBuffer;
+        private ComputeBuffer _vertXBuffer; //原始顶点数据
+        private ComputeBuffer _vertxBuffer; //动态顶点数据
         private ComputeBuffer _vertGroupBuffer; //顶点组索引缓冲区
 
         // 网格索引
@@ -161,12 +159,10 @@ namespace GSTestScene.Simulation
         private ComputeBuffer _vertDeltaPosBuffer; //顶点位移增量缓冲区
         private ComputeBuffer _vertSelectedIndicesBuffer; //选中顶点的索引缓冲区
         private ComputeBuffer _rigidVertGroupBuffer; //刚体顶点组索引缓冲区
-        private ComputeBuffer _cellMultiplierBuffer; //四面体形变乘数缓冲区
         private ComputeBuffer _cellDsInvBuffer; //四面体逆变形梯度矩阵(3x3)缓冲区
         private ComputeBuffer _cellVolumeInitBuffer; //四面体初始体积缓冲区
         private ComputeBuffer _cellDensityBuffer; //四面体密度缓冲区
-        private ComputeBuffer _cellMuBuffer; //四面体剪切模量缓冲区
-        private ComputeBuffer _cellLambdaBuffer; //四面体拉梅常数缓冲区
+        private ComputeBuffer _cellMuLambdaMultiplierBuffer; //四面体剪切模量/拉梅常数/形变乘数缓冲区
 
         // 刚体模拟参数
         // 注意：这里从原版的double改成了float
@@ -205,6 +201,8 @@ namespace GSTestScene.Simulation
         private ComputeBuffer _localTetWBuffer; //本地四面体顶点坐标权重缓冲区
         private ComputeBuffer _globalTetIdxBuffer; //全局四面体索引缓冲区
         private ComputeBuffer _globalTetWBuffer; //全局四面体权重缓冲区
+
+        private ComputeBuffer _applyInterpolationFBuffer; // 插值中间数据传输缓冲区
 
         // GS相关缓冲区。网格插值用,数据类型保留为原始的uint
         private ComputeBuffer _gsPositionBuffer; //GS位置缓冲区
@@ -292,12 +290,10 @@ namespace GSTestScene.Simulation
         private readonly int _vertDeltaPosBufferId = Shader.PropertyToID("vert_delta_pos_buffer");
         private readonly int _vertSelectedIndicesBufferId = Shader.PropertyToID("vert_selected_indices_buffer");
         private readonly int _rigidVertGroupBufferId = Shader.PropertyToID("rigid_vert_group_buffer");
-        private readonly int _cellMultiplierBufferId = Shader.PropertyToID("cell_multiplier_buffer");
         private readonly int _cellDsInvBufferId = Shader.PropertyToID("cell_ds_inv_buffer");
         private readonly int _cellVolumeInitBufferId = Shader.PropertyToID("cell_volume_init_buffer");
         private readonly int _cellDensityBufferId = Shader.PropertyToID("cell_density_buffer");
-        private readonly int _cellMuBufferId = Shader.PropertyToID("cell_mu_buffer");
-        private readonly int _cellLambdaBufferId = Shader.PropertyToID("cell_lambda_buffer");
+        private readonly int _cellMuLambdaMultiplierBufferId = Shader.PropertyToID("cell_mu_lambda_multiplier_buffer");
 
         private readonly int _rigidMassBufferId = Shader.PropertyToID("rigid_mass_buffer");
         private readonly int _rigidMassCenterInitBufferId = Shader.PropertyToID("rigid_mass_center_init_buffer");
@@ -322,18 +318,24 @@ namespace GSTestScene.Simulation
 
         // 碰撞检测额外参数
         private readonly int _collisionDetectionDistId = Shader.PropertyToID("collision_detection_dist");
+
         private readonly int _aabbGridSizeId = Shader.PropertyToID("aabb_grid_size");
 
+        // 碰撞检测参数
         private readonly int _collisionPairsBufferId = Shader.PropertyToID("collision_pairs_buffer");
         private readonly int _exactCollisionPairsBufferId = Shader.PropertyToID("exact_collision_pairs_buffer");
         private readonly int _totalPairsBufferId = Shader.PropertyToID("total_pairs_buffer");
         private readonly int _totalExactPairsBufferId = Shader.PropertyToID("total_exact_pairs_buffer");
 
+        // 两级嵌入参数
         private readonly int _covBufferId = Shader.PropertyToID("cov_buffer");
         private readonly int _localTetXBufferId = Shader.PropertyToID("local_tet_x_buffer");
         private readonly int _localTetWBufferId = Shader.PropertyToID("local_tet_w_buffer");
         private readonly int _globalTetIdxBufferId = Shader.PropertyToID("global_tet_idx_buffer");
         private readonly int _globalTetWBufferId = Shader.PropertyToID("global_tet_w_buffer");
+
+        // 应用插值嵌入额外参数
+        private readonly int _applyInterpolationFBufferId = Shader.PropertyToID("apply_interpolation_F_buffer");
 
         private readonly int _cellLocalCountId = Shader.PropertyToID("cell_local_count");
         private readonly int _cellLocalOffsetId = Shader.PropertyToID("cell_local_offset");
@@ -389,7 +391,8 @@ namespace GSTestScene.Simulation
         private int solveRigidComputeAKernel => simulateShader.FindKernel("solve_rigid_compute_A");
         private int solveRigidComputeRKernel => simulateShader.FindKernel("solve_rigid_compute_R");
         private int solveRigidUpdateXKernel => simulateShader.FindKernel("solve_rigid_update_x");
-        private int applyInterpolationKernel => simulateShader.FindKernel("apply_interpolation");
+        private int applyInterpolationIKernel => simulateShader.FindKernel("apply_interpolation_i");
+        private int applyInterpolationIIKernel => simulateShader.FindKernel("apply_interpolation_ii");
 
         // 其他默认参数
         private const int ShDegree = 3; //sh阶数
@@ -486,7 +489,7 @@ namespace GSTestScene.Simulation
                 initializeMilliSeconds = timerUtil.GetDeltaTime();
             }
 
-            MainUIManager.ShowTip("Press 'Space' to pause the process of simulation");
+            // MainUIManager.ShowTip("Press 'Space' to pause the process of simulation");
             Status.IsSimulating = true;
         }
 
@@ -545,105 +548,112 @@ namespace GSTestScene.Simulation
         {
             if (Status.IsSimulating)
             {
-                using TimerUtil simulateTimer = new TimerUtil("Simulate");
-                //拖拽过程中，更新鼠标速度
-                if (isMousePressed)
-                {
-                    UpdateMouseVelocity(Time.time, mainCamera);
-                    // Debug.Log($"velocity:{_controllerVelocity}");
-                }
+                    using TimerUtil simulateTimer = new TimerUtil("Simulate");
+                    //拖拽过程中，更新鼠标速度
+                    // if (isMousePressed)
+                    // {
+                    //     UpdateMouseVelocity(Time.time, mainCamera);
+                    //     // Debug.Log($"velocity:{_controllerVelocity}");
+                    // }
 
-                //根据鼠标的位置选择范围内的顶点，更新数据
-                UpdateSelectVertices();
+                    //根据鼠标的位置选择范围内的顶点，更新数据
+                    // UpdateSelectVertices();
 
-                //碰撞检测计数
-                int collisionCount = 0;
-                // 将一帧长(frame_dt)分割成多个子时间段(dt)
-                float dtLeft = frameDt;
-                while (dtLeft > 0f)
-                {
-                    // 每隔 collision_dection_iter_interval 步执行一次碰撞检测，减少计算量
-                    if (collisionCount % collisionDetectionIterInterval == 0)
+                    //碰撞检测计数
+                    // int collisionCount = 0;
+                    // 将一帧长(frame_dt)分割成多个子时间段(dt)
+                    // float dtLeft = frameDt;
+                    // while (dtLeft > 0f)
+                    // {
+                    //     // 每隔 collision_dection_iter_interval 步执行一次碰撞检测，减少计算量
+                    //     if (collisionCount % collisionDetectionIterInterval == 0)
+                    //     {
+                    //         using TimerUtil collisionDetectionTimer = new TimerUtil("Collision Detection");
+                    //         // 执行碰撞检测
+                    //         CollisionDetection();
+                    //         totalCollisionDetectionMilliSeconds += collisionDetectionTimer.GetDeltaTime();
+                    //     }
+                    //
+                    //     collisionCount++;
+                    //     float dt0 = Mathf.Min(dt, dtLeft);
+                    //     dtLeft -= dt0;
+                    //
+                    //     // 应用外力（重力/阻尼和控制器外力）
+                    //     using (TimerUtil xpbdTimer = new TimerUtil("Apply External Force"))
+                    //     {
+                    //         ApplyExternalForce(dt0);
+                    //         // 按偏移量设置公共缓冲区的乘数为0
+                    //         _cellMuLambdaMultiplierBuffer.SetData(new float[_totalCellsCount], 0, _totalCellsCount * 2,
+                    //             _totalCellsCount);
+                    //         totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
+                    //     }
+                    //
+                    //     // 进行FEM约束求解和碰撞处理
+                    //     for (int i = 0; i < xpbdRestIter; i++)
+                    //     {
+                    //         using (TimerUtil xpbdTimer = new TimerUtil("Memset"))
+                    //         {
+                    //             _vertDeltaPosBuffer.SetData(new float3[_totalVerticesCount]);
+                    //             totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
+                    //         }
+                    //
+                    //         // FEM求解：处理弹性形变
+                    //         using (TimerUtil femTimer = new TimerUtil("Solve FEM Constraints"))
+                    //         {
+                    //             SolveFemConstraints(dt0);
+                    //             totalFemSolveMilliSeconds += femTimer.GetDeltaTime();
+                    //         }
+                    //
+                    //         // 碰撞约束：解决顶点与三角形面之间的穿透
+                    //         using (TimerUtil collisionSolveTimer =
+                    //                new TimerUtil("Solve Triangle Point Distance Constraint"))
+                    //         {
+                    //             SolveTrianglePointDistanceConstraint();
+                    //             totalCollisionSolveMilliSeconds += collisionSolveTimer.GetDeltaTime();
+                    //         }
+                    //
+                    //         // 更新位置
+                    //         using (TimerUtil xpbdTimer = new TimerUtil("PBD Post Solve"))
+                    //         {
+                    //             PbdPostSolve();
+                    //             totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
+                    //         }
+                    //     }
+                    //
+                    //     // 将子步长的计算结果应用到顶点位置，完成时间步进
+                    //     using (TimerUtil xpbdTimer = new TimerUtil("PBD Advance"))
+                    //     {
+                    //         PbdAdvance(dt0);
+                    //         totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
+                    //     }
+                    // }
+
+                    // 计算刚体的质心运动（平移）和旋转，更新顶点位置
+                    // using (TimerUtil xpbdTimer = new TimerUtil("Solve Rigid"))
+                    // {
+                    //     SolveRigid();
+                    //     totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
+                    // }
+
+                    // 将物理顶点位置转换为高斯泼溅的渲染属性（位置、缩放、旋转）。
+                    // 插值方法：基于四面体权重（tet_w）在全局和局部坐标系间插值。
+                    using (TimerUtil interpolateTimer = new TimerUtil("Apply Interpolation"))
                     {
-                        using TimerUtil collisionDetectionTimer = new TimerUtil("Collision Detection");
-                        // 执行碰撞检测
-                        CollisionDetection();
-                        totalCollisionDetectionMilliSeconds += collisionDetectionTimer.GetDeltaTime();
+                        ApplyInterpolation();
+                        totalXpbdMilliSeconds += interpolateTimer.GetDeltaTime();
                     }
 
-                    collisionCount++;
-                    float dt0 = Mathf.Min(dt, dtLeft);
-                    dtLeft -= dt0;
-
-                    // 应用外力（重力/阻尼和控制器外力）
-                    using (TimerUtil xpbdTimer = new TimerUtil("Apply External Force"))
+                    // 提交任务并同步
+                    SubmitTaskAndSynchronize();
+                    // 更新总计模拟时间
+                    totalSimulateMilliSeconds += simulateTimer.GetDeltaTime();
+                    // 更新总步数
+                    totalSteps++;
+                    // 将计算结果更新到渲染器缓冲区
+                    foreach (GaussianObject gaussianObject in _gaussianObjects)
                     {
-                        ApplyExternalForce(dt0);
-                        _cellMultiplierBuffer.SetData(new float[_totalCellsCount]);
-                        totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
+                        gaussianObject.UpdateGaussianData(_gsPositionBuffer, _gsOtherBuffer);
                     }
-
-                    // 进行FEM约束求解和碰撞处理
-                    for (int i = 0; i < xpbdRestIter; i++)
-                    {
-                        using (TimerUtil xpbdTimer = new TimerUtil("Memset"))
-                        {
-                            _vertDeltaPosBuffer.SetData(new float3[_totalVerticesCount]);
-                            totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
-                        }
-
-                        // FEM求解：处理弹性形变
-                        using (TimerUtil femTimer = new TimerUtil("Solve FEM Constraints"))
-                        {
-                            SolveFemConstraints(dt0);
-                            totalFemSolveMilliSeconds += femTimer.GetDeltaTime();
-                        }
-
-                        // 碰撞约束：解决顶点与三角形面之间的穿透
-                        using (TimerUtil collisionSolveTimer =
-                               new TimerUtil("Solve Triangle Point Distance Constraint"))
-                        {
-                            SolveTrianglePointDistanceConstraint();
-                            totalCollisionSolveMilliSeconds += collisionSolveTimer.GetDeltaTime();
-                        }
-
-                        // 更新位置
-                        using (TimerUtil xpbdTimer = new TimerUtil("PBD Post Solve"))
-                        {
-                            PbdPostSolve();
-                            totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
-                        }
-                    }
-
-                    // 将子步长的计算结果应用到顶点位置，完成时间步进
-                    using (TimerUtil xpbdTimer = new TimerUtil("PBD Advance"))
-                    {
-                        PbdAdvance(dt0);
-                        totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
-                    }
-                }
-
-                // 计算刚体的质心运动（平移）和旋转，更新顶点位置
-                using (TimerUtil xpbdTimer = new TimerUtil("Solve Rigid"))
-                {
-                    SolveRigid();
-                    totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
-                }
-
-                // 将物理顶点位置转换为高斯泼溅的渲染属性（位置、缩放、旋转）。
-                // 插值方法：基于四面体权重（tet_w）在全局和局部坐标系间插值。
-                using (TimerUtil interpolateTimer = new TimerUtil("Apply Interpolation"))
-                {
-                    ApplyInterpolation();
-                    totalXpbdMilliSeconds += interpolateTimer.GetDeltaTime();
-                }
-
-                // 提交任务并同步
-                SubmitTaskAndSynchronize();
-                // 更新总计模拟时间
-                totalSimulateMilliSeconds += simulateTimer.GetDeltaTime();
-                // 更新总步数
-                totalSteps++;
             }
         }
 

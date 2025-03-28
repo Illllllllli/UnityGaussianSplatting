@@ -166,7 +166,6 @@ namespace GaussianSplatting.Runtime
                     continue;
 
                 // 设置很多属性到材质块中
-                // 我不知道为什么分成了两个部分？看起来是可以合到一起去的，这里面传输的都是单个gs的属性
                 gs.SetAssetDataOnMaterial(materialPropertyBlock);
                 // 高斯溅射的块数据、视图数据和排序键值
                 materialPropertyBlock.SetBuffer(GaussianSplatRenderer.Props.SplatChunks, gs.m_GpuChunks);
@@ -284,7 +283,7 @@ namespace GaussianSplatting.Runtime
             m_CommandBuffer.ReleaseTemporaryRT(GaussianSplatRenderer.Props.GaussianSplatRT);
         }
     }
-    
+
 
     // [ExecuteInEditMode]
     [ExecuteAlways]
@@ -304,9 +303,11 @@ namespace GaussianSplatting.Runtime
         [Tooltip(
             "Rendering order compared to other splats. Within same order splats are sorted by distance. Higher order splats render 'on top of' lower order splats.")]
         public int m_RenderOrder;
+
         // 更改高斯全局单体大小
         [Range(0.1f, 2.0f)] [Tooltip("Additional scaling factor for the splats")]
         public float m_SplatScale = 1.0f;
+
         // 更改高斯全局不透明度
         [Range(0.05f, 20.0f)] [Tooltip("Additional scaling factor for opacity")]
         public float m_OpacityScale = 1.0f;
@@ -320,7 +321,7 @@ namespace GaussianSplatting.Runtime
         // 间隔n帧对高斯进行排序。可能影响性能
         [Range(1, 30)] [Tooltip("Sort splats only every N frames")]
         public int m_SortNthFrame = 1;
-        
+
         // 渲染模式
         public RenderMode m_RenderMode = RenderMode.Splats;
         [Range(1.0f, 15.0f)] public float m_PointDisplaySize = 3.0f;
@@ -349,15 +350,15 @@ namespace GaussianSplatting.Runtime
             {
                 if (m_SplatCount == value) return;
                 _m_SplatCount = value;
-                onSplatCountChanged?.Invoke(this,EventArgs.Empty);
+                onSplatCountChanged?.Invoke(this, EventArgs.Empty);
             }
         } // initially same as asset splat count, but editing can change this
 
         GraphicsBuffer m_GpuSortDistances;
         internal GraphicsBuffer m_GpuSortKeys;
-        GraphicsBuffer m_GpuPosData;
-        GraphicsBuffer m_GpuOtherData;
-        GraphicsBuffer m_GpuSHData;
+        public GraphicsBuffer m_GpuPosData;
+        public GraphicsBuffer m_GpuOtherData;
+        public GraphicsBuffer m_GpuSHData;
         Texture m_GpuColorData;
         internal GraphicsBuffer m_GpuChunks;
         internal bool m_GpuChunksValid;
@@ -441,7 +442,7 @@ namespace GaussianSplatting.Runtime
 
 
         [field: NonSerialized] public bool editModified { get; private set; }
-        
+
         public uint editSelectedSplats
         {
             get => m_EditSelectedSplats;
@@ -449,7 +450,7 @@ namespace GaussianSplatting.Runtime
             {
                 if (editSelectedSplats == value) return;
                 m_EditSelectedSplats = value;
-                onEditSselectedSplatsChanged?.Invoke(this,EventArgs.Empty);
+                onEditSselectedSplatsChanged?.Invoke(this, EventArgs.Empty);
             }
         }
 
@@ -505,7 +506,7 @@ namespace GaussianSplatting.Runtime
             // 检查资产有效性
             if (!HasValidAsset)
                 return;
-            
+
             // 设置高斯溅射的数量，这个值从资产中获取
             m_SplatCount = asset.splatCount;
             // 创建多个图形缓冲区来存储高斯溅射的位置数据、其他数据、SH数据，并从资产中获取数据初始化这个缓冲区
@@ -516,7 +517,8 @@ namespace GaussianSplatting.Runtime
                 new GraphicsBuffer(GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource,
                     (int)(asset.otherData.dataSize / 4), 4) { name = "GaussianOtherData" };
             m_GpuOtherData.SetData(asset.otherData.GetData<uint>());
-            m_GpuSHData = new GraphicsBuffer(GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource, (int)(asset.shData.dataSize / 4), 4)
+            m_GpuSHData = new GraphicsBuffer(GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource,
+                    (int)(asset.shData.dataSize / 4), 4)
                 { name = "GaussianSHData" };
             m_GpuSHData.SetData(asset.shData.GetData<uint>());
             // 创建一个 Texture2D 来存储颜色数据，并从资产中获取数据初始化这个纹理
@@ -611,7 +613,7 @@ namespace GaussianSplatting.Runtime
         // new: 加入2个子项用于检查资产数据完整性
         bool resourcesAreSetUp => m_ShaderSplats != null && m_ShaderComposite != null && m_ShaderDebugPoints != null &&
                                   m_ShaderDebugBoxes != null && m_CSSplatUtilities != null &&
-                                  SystemInfo.supportsComputeShaders && m_Asset!=null&&m_Asset.CheckByteAsset();
+                                  SystemInfo.supportsComputeShaders && m_Asset != null && m_Asset.CheckByteAsset();
 
         /// <summary>
         /// 确保所有所需材质都已经创建
@@ -849,6 +851,7 @@ namespace GaussianSplatting.Runtime
                 m_PrevHash = curHash;
                 if (resourcesAreSetUp)
                 {
+                    Debug.Log("GS:Update");
                     DisposeResourcesForAsset();
                     CreateResourcesForAsset();
                 }
@@ -859,6 +862,7 @@ namespace GaussianSplatting.Runtime
                 }
             }
         }
+        
 
         public void ActivateCamera(int index)
         {
@@ -1023,6 +1027,7 @@ namespace GaussianSplatting.Runtime
                     new GraphicsBuffer(m_GpuOtherData.target | GraphicsBuffer.Target.CopyDestination,
                         m_GpuOtherData.count, m_GpuOtherData.stride) { name = "GaussianSplatEditOtherMouseDown" };
             }
+
             Graphics.CopyBuffer(m_GpuOtherData, m_GpuEditOtherMouseDown);
         }
 
@@ -1034,6 +1039,7 @@ namespace GaussianSplatting.Runtime
                     new GraphicsBuffer(m_GpuSHData.target | GraphicsBuffer.Target.CopyDestination,
                         m_GpuSHData.count, m_GpuSHData.stride) { name = "GaussianSplatEditSHMouseDown" };
             }
+
             Graphics.CopyBuffer(m_GpuSHData, m_GpuEditSHMouseDown);
         }
 
@@ -1091,7 +1097,7 @@ namespace GaussianSplatting.Runtime
             // 这三个缓冲区分别存储编辑之前高斯的位置信息和其他信息（如SH,颜色，缩放等）。在旋转编辑过程中需要使用
             if (m_GpuEditPosMouseDown == null || m_GpuEditOtherMouseDown == null || m_GpuEditSHMouseDown == null)
                 return; // should have captured initial state
-            
+
             using var cmb = new CommandBuffer { name = "SplatRotateSelection" };
             SetAssetDataOnCS(cmb, KernelIndices.RotateSelection);
 
@@ -1099,7 +1105,8 @@ namespace GaussianSplatting.Runtime
                 m_GpuEditPosMouseDown);
             cmb.SetComputeBufferParam(m_CSSplatUtilities, (int)KernelIndices.RotateSelection, Props.SplatOtherMouseDown,
                 m_GpuEditOtherMouseDown);
-            cmb.SetComputeBufferParam(m_CSSplatUtilities,(int)KernelIndices.RotateSelection,Props.SplatSHMouseDown,m_GpuEditSHMouseDown);
+            cmb.SetComputeBufferParam(m_CSSplatUtilities, (int)KernelIndices.RotateSelection, Props.SplatSHMouseDown,
+                m_GpuEditSHMouseDown);
             cmb.SetComputeVectorParam(m_CSSplatUtilities, Props.SelectionCenter, localSpaceCenter);
             cmb.SetComputeMatrixParam(m_CSSplatUtilities, Props.MatrixObjectToWorld, localToWorld);
             cmb.SetComputeMatrixParam(m_CSSplatUtilities, Props.MatrixWorldToObject, worldToLocal);
@@ -1116,7 +1123,8 @@ namespace GaussianSplatting.Runtime
             Vector3 scale)
         {
             if (!EnsureEditingBuffers()) return;
-            if (m_GpuEditPosMouseDown == null || m_GpuEditOtherMouseDown == null) return; // should have captured initial state
+            if (m_GpuEditPosMouseDown == null || m_GpuEditOtherMouseDown == null)
+                return; // should have captured initial state
 
             using var cmb = new CommandBuffer { name = "SplatScaleSelection" };
             SetAssetDataOnCS(cmb, KernelIndices.ScaleSelection);
@@ -1340,6 +1348,5 @@ namespace GaussianSplatting.Runtime
         }
 
         public GraphicsBuffer GpuEditDeleted => m_GpuEditDeleted;
-        
     }
 }

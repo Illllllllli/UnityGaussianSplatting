@@ -90,6 +90,7 @@ inline void store_gs_scale(inout RWStructuredBuffer<uint> buffer, const float3 s
     buffer[start_index + 2] = scale_uint3[2];
 }
 
+
 /**
  * 从缓冲区对应索引读取float3x3矩阵
  * @param buffer 缓冲区
@@ -388,4 +389,19 @@ inline void add_collision_pairs(inout RWStructuredBuffer<float3> vert_buffer,
     }
 }
 
+/// 两级嵌入相关 ///
+
+
+/**
+ * 检测GS对应的嵌入索引是否有效
+ *@param idx GS索引
+ *@param global_tet_idx 全局四面体索引缓冲区
+ */
+inline bool is_valid_embed(int idx, const RWStructuredBuffer<int> global_tet_idx)
+{
+    return global_tet_idx[idx * 4 + 0] >= 0 &&
+        global_tet_idx[idx * 4 + 1] >= 0 &&
+        global_tet_idx[idx * 4 + 2] >= 0 &&
+        global_tet_idx[idx * 4 + 3] >= 0;
+}
 # endif

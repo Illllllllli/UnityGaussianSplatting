@@ -618,8 +618,8 @@ namespace GSTestScene.Simulation
         private void SolveFemConstraintsCompute(float dt0)
         {
             int gridSize = CeilDivide(_totalCellsCount, SimulateBlockSize / 2);
-            SetShaderComputeBuffer(simulateShader, solveFemConstraintsKernel, _cellMuBufferId, _cellMuBuffer);
-            SetShaderComputeBuffer(simulateShader, solveFemConstraintsKernel, _cellLambdaBufferId, _cellLambdaBuffer);
+            SetShaderComputeBuffer(simulateShader, solveFemConstraintsKernel, _cellMuLambdaMultiplierBufferId,
+                _cellMuLambdaMultiplierBuffer);
             SetShaderComputeBuffer(simulateShader, solveFemConstraintsKernel, _cellIndicesBufferId, _cellIndicesBuffer);
             SetShaderComputeBuffer(simulateShader, solveFemConstraintsKernel, _vertNewXBufferId, _vertNewXBuffer);
             SetShaderComputeBuffer(simulateShader, solveFemConstraintsKernel, _vertInvMassBufferId, _vertInvMassBuffer);
@@ -628,8 +628,6 @@ namespace GSTestScene.Simulation
                 _cellVolumeInitBuffer);
             SetShaderComputeBuffer(simulateShader, solveFemConstraintsKernel, _vertDeltaPosBufferId,
                 _vertDeltaPosBuffer);
-            SetShaderComputeBuffer(simulateShader, solveFemConstraintsKernel, _cellMultiplierBufferId,
-                _cellMultiplierBuffer);
             SetShaderComputeBuffer(simulateShader, solveFemConstraintsKernel, _rigidVertGroupBufferId,
                 _rigidVertGroupBuffer);
             _commandBuffer.SetComputeIntParam(simulateShader, _cellTotalCountId, _totalCellsCount);
@@ -773,18 +771,30 @@ namespace GSTestScene.Simulation
         private void ApplyInterpolationCompute()
         {
             int gridSize = CeilDivide(_totalGsCount, SimulateBlockSize);
-            SetShaderComputeBuffer(simulateShader, applyInterpolationKernel, _gsPositionBufferId, _gsPositionBuffer);
-            SetShaderComputeBuffer(simulateShader, applyInterpolationKernel, _gsOtherBufferId, _gsOtherBuffer);
-            SetShaderComputeBuffer(simulateShader, applyInterpolationKernel, _covBufferId, _covBuffer);
-            SetShaderComputeBuffer(simulateShader, applyInterpolationKernel, _cellIndicesBufferId, _cellIndicesBuffer);
-            SetShaderComputeBuffer(simulateShader, applyInterpolationKernel, _vertXBufferId, _vertXBuffer);
-            SetShaderComputeBuffer(simulateShader, applyInterpolationKernel, _vertxBufferId, _vertxBuffer);
-            SetShaderComputeBuffer(simulateShader, applyInterpolationKernel, _globalTetIdxBufferId,
+            // 第一部分
+            SetShaderComputeBuffer(simulateShader, applyInterpolationIKernel, _gsPositionBufferId, _gsPositionBuffer);
+            SetShaderComputeBuffer(simulateShader, applyInterpolationIKernel, _cellIndicesBufferId, _cellIndicesBuffer);
+            SetShaderComputeBuffer(simulateShader, applyInterpolationIKernel, _vertXBufferId, _vertXBuffer);
+            SetShaderComputeBuffer(simulateShader, applyInterpolationIKernel, _vertxBufferId, _vertxBuffer);
+            SetShaderComputeBuffer(simulateShader, applyInterpolationIKernel, _globalTetIdxBufferId,
                 _globalTetIdxBuffer);
-            SetShaderComputeBuffer(simulateShader, applyInterpolationKernel, _globalTetWBufferId, _globalTetWBuffer);
-            SetShaderComputeBuffer(simulateShader, applyInterpolationKernel, _localTetWBufferId, _localTetWBuffer);
+            SetShaderComputeBuffer(simulateShader, applyInterpolationIKernel, _globalTetWBufferId, _globalTetWBuffer);
+            SetShaderComputeBuffer(simulateShader, applyInterpolationIKernel, _localTetWBufferId, _localTetWBuffer);
+            SetShaderComputeBuffer(simulateShader, applyInterpolationIKernel, _applyInterpolationFBufferId,
+                _applyInterpolationFBuffer);
             _commandBuffer.SetComputeIntParam(simulateShader, _gsTotalCountId, _totalGsCount);
-            _commandBuffer.DispatchCompute(simulateShader, applyInterpolationKernel, gridSize, 1, 1);
+            _commandBuffer.DispatchCompute(simulateShader, applyInterpolationIKernel, gridSize, 1, 1);
+            // 执行并同步
+            SubmitTaskAndSynchronize();
+            // 第二部分
+            SetShaderComputeBuffer(simulateShader, applyInterpolationIIKernel, _covBufferId, _covBuffer);
+            SetShaderComputeBuffer(simulateShader, applyInterpolationIIKernel, _gsOtherBufferId, _gsOtherBuffer);
+            SetShaderComputeBuffer(simulateShader, applyInterpolationIIKernel, _globalTetIdxBufferId,
+                _globalTetIdxBuffer);
+            SetShaderComputeBuffer(simulateShader, applyInterpolationIIKernel, _applyInterpolationFBufferId,
+                _applyInterpolationFBuffer);
+            _commandBuffer.SetComputeIntParam(simulateShader, _gsTotalCountId, _totalGsCount);
+            _commandBuffer.DispatchCompute(simulateShader, applyInterpolationIIKernel, gridSize, 1, 1);
         }
     }
 
@@ -805,7 +815,7 @@ namespace GSTestScene.Simulation
         public float nu = 0.3f;
 
         // 标记物体是否为刚体（是否可以发生形变）
-        public bool isRigid = false;
+        public bool isRigid = true;
 
         // 物体的初始旋转
         public Quaternion rot = Quaternion.identity;

@@ -233,7 +233,7 @@ inline float3x3 build_rotation_matrix(float4 q)
  * @param r 旋转矩阵
  * @return 四元数对应的旋转矩阵
  */
-inline float4 build_quaternion(const float3x3 r)
+inline float4 build_quaternion(in float r[3][3])
 {
     float4 q;
     const float trace = r[0][0] + r[1][1] + r[2][2];

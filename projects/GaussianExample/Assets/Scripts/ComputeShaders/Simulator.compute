@@ -39,7 +39,8 @@
 #pragma kernel solve_rigid_compute_A
 #pragma kernel solve_rigid_compute_R
 #pragma kernel solve_rigid_update_x
-#pragma kernel apply_interpolation
+#pragma kernel apply_interpolation_i
+#pragma kernel apply_interpolation_ii
 
 #include "MathUtils.hlsl"
 #include "SimulateUtils.hlsl"
@@ -83,8 +84,8 @@ int face_total_count;
 int cell_total_count;
 int boundary;
 // 网格缓冲区参数
-RWStructuredBuffer<float3> vertices_x_buffer; //二级顶点数据（部分顶点）(?)
-RWStructuredBuffer<float3> vertices_X_buffer; //一级顶点数据（所有顶点）(?)
+RWStructuredBuffer<float3> vertices_x_buffer; //动态顶点数据
+RWStructuredBuffer<float3> vertices_X_buffer; //原始顶点数据
 RWStructuredBuffer<int> vert_group_buffer; // 顶点组数据
 
 RWStructuredBuffer<int> edge_indices_buffer; // 边索引
@@ -101,12 +102,10 @@ RWStructuredBuffer<float3> vert_new_x_buffer; //顶点新位置缓冲区
 RWStructuredBuffer<uint3> vert_delta_pos_buffer; //顶点位移增量缓冲区
 RWStructuredBuffer<int> vert_selected_indices_buffer; //被选中的顶点的索引列表（1为被选中）
 RWStructuredBuffer<int> rigid_vert_group_buffer; //刚体组索引
-RWStructuredBuffer<float> cell_multiplier_buffer; //四面体形变乘数缓冲区
 RWStructuredBuffer<float> cell_ds_inv_buffer; // 逆变形梯度矩阵
 RWStructuredBuffer<float> cell_volume_init_buffer; //四面体初始体积
 RWStructuredBuffer<float> cell_density_buffer; // 四面体密度
-RWStructuredBuffer<float> cell_mu_buffer; //四面体剪切模量缓冲区
-RWStructuredBuffer<float> cell_lambda_buffer; //四面体拉梅常数缓冲区
+RWStructuredBuffer<float> cell_mu_lambda_multiplier_buffer; //四面体剪切模量缓冲区
 
 //注意：因为double的原子加法难以自行实现，所以更改原始数据类型为float
 //注意：为了实现原子加法，类型由float更改为uint
@@ -354,13 +353,15 @@ void init_fem_bases(uint3 id : SV_DispatchThreadID)
     if (idx < cell_total_count)
     {
         // 计算顶点距离差
-        float3x3 DS;
-        for (int i = 0; i < 3; i++)
-        {
-            DS[i] = vertices_X_buffer[cell_indices_buffer[idx * 4 + i]] - vertices_X_buffer[
-                cell_indices_buffer[idx * 4 + 3]];
-        }
-        DS = transpose(DS);
+        const float3x3 DS = transpose(float3x3(
+            vertices_X_buffer[cell_indices_buffer[idx * 4 + 0]] - vertices_X_buffer[
+                cell_indices_buffer[idx * 4 + 3]],
+            vertices_X_buffer[cell_indices_buffer[idx * 4 + 1]] - vertices_X_buffer[
+                cell_indices_buffer[idx * 4 + 3]],
+            vertices_X_buffer[cell_indices_buffer[idx * 4 + 2]] - vertices_X_buffer[
+                cell_indices_buffer[idx * 4 + 3]]
+        ));
+
         const float3x3 DS_inv = inverse_3x3(DS);
         store_matrix_float(DS_inv, cell_ds_inv_buffer, idx);
         // 计算体积
@@ -951,6 +952,38 @@ void apply_external_force(uint3 id : SV_DispatchThreadID)
     }
 }
 
+
+// 由于UAV限制将三个参数合并到一个缓冲区中，使用下面的方式存取
+inline float load_mu_from_buffer(const int index)
+{
+    return cell_mu_lambda_multiplier_buffer[index];
+}
+
+inline void store_mu_to_buffer(const int index, const float value)
+{
+    cell_mu_lambda_multiplier_buffer[index] = value;
+}
+
+inline float load_lambda_from_buffer(const int index)
+{
+    return cell_mu_lambda_multiplier_buffer[index + cell_total_count];
+}
+
+inline void store_lambda_to_buffer(const int index, const float value)
+{
+    cell_mu_lambda_multiplier_buffer[index + cell_total_count] = value;
+}
+
+inline float load_multiplier_from_buffer(const int index)
+{
+    return cell_mu_lambda_multiplier_buffer[index + cell_total_count * 2];
+}
+
+inline void store_multiplier_to_buffer(const int index, const float value)
+{
+    cell_mu_lambda_multiplier_buffer[index + cell_total_count * 2] = value;
+}
+
 /**
  * FEM约束求解
  * @param id 线程ID
@@ -994,9 +1027,9 @@ void solve_fem_constraints(uint3 id : SV_DispatchThreadID)
                 0.5f * (sig[2][2] * sig[2][2] - 1.0f)
             };
             tr_E = E_diag[0] + E_diag[1] + E_diag[2];
-            sig[0][0] = 2.0f * cell_mu_buffer[idx] * E_diag[0] + cell_lambda_buffer[idx] * tr_E;
-            sig[1][1] = 2.0f * cell_mu_buffer[idx] * E_diag[1] + cell_lambda_buffer[idx] * tr_E;
-            sig[2][2] = 2.0f * cell_mu_buffer[idx] * E_diag[2] + cell_lambda_buffer[idx] * tr_E;
+            sig[0][0] = 2.0f * load_mu_from_buffer(idx) * E_diag[0] + load_lambda_from_buffer(idx) * tr_E;
+            sig[1][1] = 2.0f * load_mu_from_buffer(idx) * E_diag[1] + load_lambda_from_buffer(idx) * tr_E;
+            sig[2][2] = 2.0f * load_mu_from_buffer(idx) * E_diag[2] + load_lambda_from_buffer(idx) * tr_E;
 
             for (int i = 0; i < 3; ++i)
             {
@@ -1021,7 +1054,7 @@ void solve_fem_constraints(uint3 id : SV_DispatchThreadID)
                 psi += E[i][j];
             }
         }
-        psi = cell_mu_buffer[idx] * psi + 0.5 * cell_lambda_buffer[idx] * tr_E * tr_E;
+        psi = load_mu_from_buffer(idx) * psi + 0.5 * load_lambda_from_buffer(idx) * tr_E * tr_E;
 
         // 约束力梯度与求解
         float H[3][3];
@@ -1056,12 +1089,15 @@ void solve_fem_constraints(uint3 id : SV_DispatchThreadID)
         // 计算弹性势能
         const float U = cell_volume_init_buffer[idx] * psi;
         float C = sqrt(2.0f * U);
-        const float yE = cell_mu_buffer[idx] * (3.0f * cell_lambda_buffer[idx] + 2.0f * cell_mu_buffer[idx]) /
-            (cell_mu_buffer[idx] + cell_lambda_buffer[idx]); //杨氏模量
+        const float yE = load_mu_from_buffer(idx) * (3.0f * load_lambda_from_buffer(idx) + 2.0f *
+            load_mu_from_buffer(idx)) / (load_mu_from_buffer(idx) + load_lambda_from_buffer(idx)); //杨氏模量
         const float alpha = 1.0f / (yE * dt * dt); //柔度系数
         sum_normGradC += C * C * alpha;
-        float s = -(C * C + C * alpha * cell_multiplier_buffer[idx]) / sum_normGradC;
-        if (sum_normGradC > eps) { cell_multiplier_buffer[idx] -= s; }
+        float s = -(C * C + C * alpha * load_multiplier_from_buffer(idx)) / sum_normGradC;
+        if (sum_normGradC > eps)
+        {
+            store_multiplier_to_buffer(idx, load_multiplier_from_buffer(idx) - s);
+        }
         s *= relaxation_factor;
         #else
         const float C = cell_volume_init_buffer[idx] * psi;
@@ -1179,10 +1215,11 @@ void solve_triangle_point_distance_constraint(uint3 id : SV_DispatchThreadID)
         {
             q[i] = p0[i] * b0 + p1[i] * b1 + p2[i] * b2;
         }
-        const float3 n = p - q; // 碰撞法向量
+        float3 n = p - q; // 碰撞法向量
         // const float3 fn = cross(d1, d2);
 
-        const float dist = normalize(n); // 实际距离
+        const float dist = length(n); // 实际距离
+        n = normalize(n);
 
         // 约束求解与位移更新
         const float C = dist - collision_detection_dist; // 约束函数
@@ -1287,7 +1324,7 @@ void solve_rigid_init_mass_center(uint3 id : SV_DispatchThreadID)
         for (int i = 0; i < 3; i++)
         {
             atomic_add_float(rigid_mass_center_buffer, object_id * 3 + i,
-                             asfloat(vert_mass_buffer[idx]) * vertices_x_buffer[idx]);
+                             asfloat(vert_mass_buffer[idx]) * vertices_x_buffer[idx][i]);
         }
     }
 }
@@ -1378,11 +1415,107 @@ void solve_rigid_update_x(uint3 id : SV_DispatchThreadID)
     }
 }
 
+
+// 用于插值过程数据传递
+RWStructuredBuffer<float3x3> apply_interpolation_F_buffer;
 /**
  * 实际调用GPU计算GS网格插值更新结果
  * @param id 线程ID
  **/
 [numthreads(BLOCK_SIZE,1,1)]
-void apply_interpolation(uint3 id : SV_DispatchThreadID)
+void apply_interpolation_i(uint3 id : SV_DispatchThreadID)
 {
+    const int idx = id.x;
+    if (idx < gs_total_count)
+    {
+        if (is_valid_embed(idx, global_tet_idx_buffer))
+        {
+            float3 local_X[4], local_x[4];
+            for (int c = 0; c < 4; c++)
+            {
+                const float3 w = float3(
+                    global_tet_w_buffer[(idx * 4 + c) * 3 + 0],
+                    global_tet_w_buffer[(idx * 4 + c) * 3 + 1],
+                    global_tet_w_buffer[(idx * 4 + c) * 3 + 2]
+                );
+                const int t_id = global_tet_idx_buffer[idx * 4 + c];
+                const float3x3 global_DS = transpose(float3x3(
+                    vertices_X_buffer[cell_indices_buffer[t_id * 4 + 0]] - vertices_X_buffer[cell_indices_buffer[t_id *
+                        4 + 3]],
+                    vertices_X_buffer[cell_indices_buffer[t_id * 4 + 1]] - vertices_X_buffer[cell_indices_buffer[t_id *
+                        4 + 3]],
+                    vertices_X_buffer[cell_indices_buffer[t_id * 4 + 2]] - vertices_X_buffer[cell_indices_buffer[t_id *
+                        4 + 3]]
+                ));
+    
+                const float3x3 global_Ds = transpose(float3x3(
+                    vertices_x_buffer[cell_indices_buffer[t_id * 4 + 0]] - vertices_x_buffer[cell_indices_buffer[t_id *
+                        4 + 3]],
+                    vertices_x_buffer[cell_indices_buffer[t_id * 4 + 1]] - vertices_x_buffer[cell_indices_buffer[t_id *
+                        4 + 3]],
+                    vertices_x_buffer[cell_indices_buffer[t_id * 4 + 2]] - vertices_x_buffer[cell_indices_buffer[t_id *
+                        4 + 3]]
+                ));
+    
+                const float3 g_DS_w = mul(global_DS, w);
+                const float3 g_Ds_w = mul(global_Ds, w);
+    
+                local_X[c] = g_DS_w + vertices_X_buffer[cell_indices_buffer[t_id * 4 + 3]];
+                local_x[c] = g_Ds_w + vertices_x_buffer[cell_indices_buffer[t_id * 4 + 3]];
+            }
+            const float3x3 local_DS = transpose(float3x3(
+                local_X[0] - local_X[3],
+                local_X[1] - local_X[3],
+                local_X[2] - local_X[3]
+            ));
+            const float3x3 local_Ds = transpose(float3x3(
+                local_x[0] - local_x[3],
+                local_x[1] - local_x[3],
+                local_x[2] - local_x[3]
+            ));
+            const float3 l_w = float3(
+                local_tet_w_buffer[idx * 3 + 0],
+                local_tet_w_buffer[idx * 3 + 1],
+                local_tet_w_buffer[idx * 3 + 2]
+            );
+            const float3 l_Ds_w = mul(local_Ds, l_w);
+            // 更新GS位置
+            store_gs_pos(gs_position_buffer, l_Ds_w + local_x[3], idx);
+
+            float3x3 local_DS_inv = inverse_3x3(local_DS);
+            float3x3 F = mul(local_Ds, local_DS_inv);
+            // 把F存储到中间缓冲区
+            apply_interpolation_F_buffer[idx] = F;
+            // 剩下的步骤是计算用于旋转SH的gs_local_rot矩阵。因为没有定义所以忽略
+        }
+    }
+}
+
+/**
+ * 实际调用GPU计算GS网格插值更新结果
+ * @param id 线程ID
+ **/
+[numthreads(BLOCK_SIZE,1,1)]
+void apply_interpolation_ii(uint3 id : SV_DispatchThreadID)
+{
+    const int idx = id.x;
+    if (idx < gs_total_count)
+    {
+        if (is_valid_embed(idx, global_tet_idx_buffer))
+        {
+            // 从中间缓冲区恢复F
+            const float3x3 F = apply_interpolation_F_buffer[idx];
+            const float3x3 Ft = transpose(F);
+            const float3x3 tmpB = mul(F, load_matrix_float(cov_buffer, idx));
+            const float3x3 B = mul(tmpB, Ft);
+            float U[3][3], sigma[3][3], V[3][3];
+            ssvd3x3(B, U, sigma, V);
+            const float4 rotation = build_quaternion(U);
+            // 更新GS旋转
+            store_gs_rotation(gs_other_buffer, rotation, idx);
+            // 更新GS缩放
+            const float3 new_scale = sqrt(max(float3(sigma[0][0], sigma[1][1], sigma[2][2]), 1e-8f));
+            store_gs_scale(gs_other_buffer, new_scale, idx);
+        }
+    }
 }

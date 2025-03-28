@@ -75,13 +75,11 @@ namespace GSTestScene.Simulation
                 _vertDeltaPosBuffer = new ComputeBuffer(_totalVerticesCount, sizeof(float) * 3);
                 _vertSelectedIndicesBuffer = new ComputeBuffer(_totalVerticesCount, sizeof(int));
                 _rigidVertGroupBuffer = new ComputeBuffer(_totalVerticesCount, sizeof(int));
-                _cellMultiplierBuffer = new ComputeBuffer(_totalCellsCount, sizeof(float));
                 _cellDsInvBuffer = new ComputeBuffer(_totalCellsCount * 9, sizeof(float));
 
                 _cellVolumeInitBuffer = new ComputeBuffer(_totalCellsCount, sizeof(float));
                 _cellDensityBuffer = new ComputeBuffer(_totalCellsCount, sizeof(float));
-                _cellMuBuffer = new ComputeBuffer(_totalCellsCount, sizeof(float));
-                _cellLambdaBuffer = new ComputeBuffer(_totalCellsCount, sizeof(float));
+                _cellMuLambdaMultiplierBuffer = new ComputeBuffer(_totalCellsCount * 3, sizeof(float));
 
                 _rigidMassBuffer = new ComputeBuffer(_gaussianObjects.Count, sizeof(float));
                 _rigidMassBuffer.SetData(new float[_gaussianObjects.Count]);
@@ -124,6 +122,8 @@ namespace GSTestScene.Simulation
                 _globalTetIdxBuffer = new ComputeBuffer(_totalGsCount * 4, sizeof(int));
                 _globalTetWBuffer = new ComputeBuffer(_totalGsCount * 12, sizeof(float));
                 _globalTetWBuffer.SetData(new float[_totalGsCount * 12]);
+
+                _applyInterpolationFBuffer = new ComputeBuffer(_totalGsCount, sizeof(float) * 9);
             }
             catch (Exception e)
             {
@@ -154,8 +154,10 @@ namespace GSTestScene.Simulation
                 BatchCopyToBuffer(_faceIndicesBuffer, o => o.FacesData, o => o.FacesOffset, 3);
                 BatchCopyToBuffer(_cellIndicesBuffer, o => o.CellsData, o => o.CellsOffset, 4);
                 BatchCopyToBuffer(_cellDensityBuffer, o => o.DensityData, o => o.CellsOffset, 1);
-                BatchCopyToBuffer(_cellMuBuffer, o => o.MuData, o => o.CellsOffset, 1);
-                BatchCopyToBuffer(_cellLambdaBuffer, o => o.LambdaData, o => o.CellsOffset, 1);
+                // Mu和Lambda传输到同一个缓冲区
+                BatchCopyToBuffer(_cellMuLambdaMultiplierBuffer, o => o.MuData, o => o.CellsOffset, 1, offset: 0);
+                BatchCopyToBuffer(_cellMuLambdaMultiplierBuffer, o => o.LambdaData, o => o.CellsOffset, 1,
+                    offset: _totalCellsCount);
             }
             catch (Exception e)
             {
@@ -171,7 +173,8 @@ namespace GSTestScene.Simulation
                 Func<GaussianObject, NativeArray<TDataType>> dataSelector, // 动态选择数据源
                 Func<GaussianObject, int> offsetCalculator, // 计算对象在缓冲区的偏移
                 int elementStride, // 元素步长(如顶点3=float3)
-                bool skipEnd = false // 是否跳过最后一个元素(GS位置数据貌似多了一个元素用于标记末尾)
+                bool skipEnd = false, // 是否跳过最后一个元素(GS位置数据貌似多了一个元素用于标记末尾)
+                int offset = 0 // 缓冲区偏移量(以缓冲区元素大小计）
             ) where TDataType : struct
             {
                 // 预合并所有数据到临时数组
@@ -180,6 +183,7 @@ namespace GSTestScene.Simulation
                     targetBuffer.count * targetBuffer.stride / Marshal.SizeOf<TDataType>(),
                     Allocator.Temp,
                     NativeArrayOptions.UninitializedMemory);
+                int totalCopyLength = 0;
                 foreach (GaussianObject gaussianObject in _gaussianObjects)
                 {
                     if (gaussianObject.IsBackground) continue;
@@ -195,6 +199,8 @@ namespace GSTestScene.Simulation
                         copyLength--;
                     }
 
+                    totalCopyLength += copyLength;
+
                     // 分段拷贝
                     NativeArray<TDataType>.Copy(
                         srcData, 0,
@@ -203,7 +209,7 @@ namespace GSTestScene.Simulation
                 }
 
                 // 一次性提交GPU缓冲
-                targetBuffer.SetData(mergedData);
+                targetBuffer.SetData(mergedData, 0, offset, totalCopyLength);
             }
         }
 
@@ -331,12 +337,10 @@ namespace GSTestScene.Simulation
             _vertDeltaPosBuffer?.Dispose();
             _vertSelectedIndicesBuffer?.Dispose();
             _rigidVertGroupBuffer?.Dispose();
-            _cellMultiplierBuffer?.Dispose();
             _cellDsInvBuffer?.Dispose();
             _cellVolumeInitBuffer?.Dispose();
             _cellDensityBuffer?.Dispose();
-            _cellMuBuffer?.Dispose();
-            _cellLambdaBuffer?.Dispose();
+            _cellMuLambdaMultiplierBuffer?.Dispose();
 
             _rigidMassBuffer?.Dispose();
             _rigidMassCenterInitBuffer?.Dispose();
@@ -367,6 +371,7 @@ namespace GSTestScene.Simulation
             _localTetWBuffer?.Dispose();
             _globalTetIdxBuffer?.Dispose();
             _globalTetWBuffer?.Dispose();
+            _applyInterpolationFBuffer?.Dispose();
 
             _commandBuffer?.Dispose();
         }
