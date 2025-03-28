@@ -506,10 +506,14 @@ namespace GSTestScene.Simulation
         /// </summary>
         public void ResetSimulate()
         {
-            // 从已保存的资产恢复到初始状态
-            _savedAssets.Select((asset, index) =>
-                GaussianSplats[index].GetComponent<GaussianSplatRenderer>().m_Asset = asset);
             Status.IsSimulating = false;
+            // 从已保存的资产恢复到初始状态
+            for (int i = 0; i < _savedAssets.Count; i++)
+            {
+                GaussianSplats[i].GetComponent<GaussianSplatRenderer>().m_Asset = _savedAssets[i];
+            }
+
+
             // 清空统计量
             totalSteps = 0;
             initializeMilliSeconds = 0;
@@ -548,112 +552,112 @@ namespace GSTestScene.Simulation
         {
             if (Status.IsSimulating)
             {
-                    using TimerUtil simulateTimer = new TimerUtil("Simulate");
-                    //拖拽过程中，更新鼠标速度
-                    // if (isMousePressed)
-                    // {
-                    //     UpdateMouseVelocity(Time.time, mainCamera);
-                    //     // Debug.Log($"velocity:{_controllerVelocity}");
-                    // }
+                using TimerUtil simulateTimer = new TimerUtil("Simulate");
+                //拖拽过程中，更新鼠标速度
+                if (isMousePressed)
+                {
+                    UpdateMouseVelocity(Time.time, mainCamera);
+                    // Debug.Log($"velocity:{_controllerVelocity}");
+                }
 
-                    //根据鼠标的位置选择范围内的顶点，更新数据
-                    // UpdateSelectVertices();
+                //根据鼠标的位置选择范围内的顶点，更新数据
+                UpdateSelectVertices();
 
-                    //碰撞检测计数
-                    // int collisionCount = 0;
-                    // 将一帧长(frame_dt)分割成多个子时间段(dt)
-                    // float dtLeft = frameDt;
-                    // while (dtLeft > 0f)
-                    // {
-                    //     // 每隔 collision_dection_iter_interval 步执行一次碰撞检测，减少计算量
-                    //     if (collisionCount % collisionDetectionIterInterval == 0)
-                    //     {
-                    //         using TimerUtil collisionDetectionTimer = new TimerUtil("Collision Detection");
-                    //         // 执行碰撞检测
-                    //         CollisionDetection();
-                    //         totalCollisionDetectionMilliSeconds += collisionDetectionTimer.GetDeltaTime();
-                    //     }
-                    //
-                    //     collisionCount++;
-                    //     float dt0 = Mathf.Min(dt, dtLeft);
-                    //     dtLeft -= dt0;
-                    //
-                    //     // 应用外力（重力/阻尼和控制器外力）
-                    //     using (TimerUtil xpbdTimer = new TimerUtil("Apply External Force"))
-                    //     {
-                    //         ApplyExternalForce(dt0);
-                    //         // 按偏移量设置公共缓冲区的乘数为0
-                    //         _cellMuLambdaMultiplierBuffer.SetData(new float[_totalCellsCount], 0, _totalCellsCount * 2,
-                    //             _totalCellsCount);
-                    //         totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
-                    //     }
-                    //
-                    //     // 进行FEM约束求解和碰撞处理
-                    //     for (int i = 0; i < xpbdRestIter; i++)
-                    //     {
-                    //         using (TimerUtil xpbdTimer = new TimerUtil("Memset"))
-                    //         {
-                    //             _vertDeltaPosBuffer.SetData(new float3[_totalVerticesCount]);
-                    //             totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
-                    //         }
-                    //
-                    //         // FEM求解：处理弹性形变
-                    //         using (TimerUtil femTimer = new TimerUtil("Solve FEM Constraints"))
-                    //         {
-                    //             SolveFemConstraints(dt0);
-                    //             totalFemSolveMilliSeconds += femTimer.GetDeltaTime();
-                    //         }
-                    //
-                    //         // 碰撞约束：解决顶点与三角形面之间的穿透
-                    //         using (TimerUtil collisionSolveTimer =
-                    //                new TimerUtil("Solve Triangle Point Distance Constraint"))
-                    //         {
-                    //             SolveTrianglePointDistanceConstraint();
-                    //             totalCollisionSolveMilliSeconds += collisionSolveTimer.GetDeltaTime();
-                    //         }
-                    //
-                    //         // 更新位置
-                    //         using (TimerUtil xpbdTimer = new TimerUtil("PBD Post Solve"))
-                    //         {
-                    //             PbdPostSolve();
-                    //             totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
-                    //         }
-                    //     }
-                    //
-                    //     // 将子步长的计算结果应用到顶点位置，完成时间步进
-                    //     using (TimerUtil xpbdTimer = new TimerUtil("PBD Advance"))
-                    //     {
-                    //         PbdAdvance(dt0);
-                    //         totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
-                    //     }
-                    // }
-
-                    // 计算刚体的质心运动（平移）和旋转，更新顶点位置
-                    // using (TimerUtil xpbdTimer = new TimerUtil("Solve Rigid"))
-                    // {
-                    //     SolveRigid();
-                    //     totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
-                    // }
-
-                    // 将物理顶点位置转换为高斯泼溅的渲染属性（位置、缩放、旋转）。
-                    // 插值方法：基于四面体权重（tet_w）在全局和局部坐标系间插值。
-                    using (TimerUtil interpolateTimer = new TimerUtil("Apply Interpolation"))
+                //碰撞检测计数
+                int collisionCount = 0;
+                // 将一帧长(frame_dt)分割成多个子时间段(dt)
+                float dtLeft = frameDt;
+                while (dtLeft > 0f)
+                {
+                    // 每隔 collision_dection_iter_interval 步执行一次碰撞检测，减少计算量
+                    if (collisionCount % collisionDetectionIterInterval == 0)
                     {
-                        ApplyInterpolation();
-                        totalXpbdMilliSeconds += interpolateTimer.GetDeltaTime();
+                        using TimerUtil collisionDetectionTimer = new TimerUtil("Collision Detection");
+                        // 执行碰撞检测
+                        CollisionDetection();
+                        totalCollisionDetectionMilliSeconds += collisionDetectionTimer.GetDeltaTime();
                     }
 
-                    // 提交任务并同步
-                    SubmitTaskAndSynchronize();
-                    // 更新总计模拟时间
-                    totalSimulateMilliSeconds += simulateTimer.GetDeltaTime();
-                    // 更新总步数
-                    totalSteps++;
-                    // 将计算结果更新到渲染器缓冲区
-                    foreach (GaussianObject gaussianObject in _gaussianObjects)
+                    collisionCount++;
+                    float dt0 = Mathf.Min(dt, dtLeft);
+                    dtLeft -= dt0;
+
+                    // 应用外力（重力/阻尼和控制器外力）
+                    using (TimerUtil xpbdTimer = new TimerUtil("Apply External Force"))
                     {
-                        gaussianObject.UpdateGaussianData(_gsPositionBuffer, _gsOtherBuffer);
+                        ApplyExternalForce(dt0);
+                        // 按偏移量设置公共缓冲区的乘数为0
+                        _cellMuLambdaMultiplierBuffer.SetData(new float[_totalCellsCount], 0, _totalCellsCount * 2,
+                            _totalCellsCount);
+                        totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
                     }
+
+                    // 进行FEM约束求解和碰撞处理
+                    for (int i = 0; i < xpbdRestIter; i++)
+                    {
+                        using (TimerUtil xpbdTimer = new TimerUtil("Memset"))
+                        {
+                            _vertDeltaPosBuffer.SetData(new float3[_totalVerticesCount]);
+                            totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
+                        }
+
+                        // FEM求解：处理弹性形变
+                        using (TimerUtil femTimer = new TimerUtil("Solve FEM Constraints"))
+                        {
+                            SolveFemConstraints(dt0);
+                            totalFemSolveMilliSeconds += femTimer.GetDeltaTime();
+                        }
+
+                        // 碰撞约束：解决顶点与三角形面之间的穿透
+                        using (TimerUtil collisionSolveTimer =
+                               new TimerUtil("Solve Triangle Point Distance Constraint"))
+                        {
+                            SolveTrianglePointDistanceConstraint();
+                            totalCollisionSolveMilliSeconds += collisionSolveTimer.GetDeltaTime();
+                        }
+
+                        // 更新位置
+                        using (TimerUtil xpbdTimer = new TimerUtil("PBD Post Solve"))
+                        {
+                            PbdPostSolve();
+                            totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
+                        }
+                    }
+
+                    // 将子步长的计算结果应用到顶点位置，完成时间步进
+                    using (TimerUtil xpbdTimer = new TimerUtil("PBD Advance"))
+                    {
+                        PbdAdvance(dt0);
+                        totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
+                    }
+                }
+
+                // 计算刚体的质心运动（平移）和旋转，更新顶点位置
+                using (TimerUtil xpbdTimer = new TimerUtil("Solve Rigid"))
+                {
+                    SolveRigid();
+                    totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
+                }
+
+                // 将物理顶点位置转换为高斯泼溅的渲染属性（位置、缩放、旋转）。
+                // 插值方法：基于四面体权重（tet_w）在全局和局部坐标系间插值。
+                using (TimerUtil interpolateTimer = new TimerUtil("Apply Interpolation"))
+                {
+                    ApplyInterpolation();
+                    totalXpbdMilliSeconds += interpolateTimer.GetDeltaTime();
+                }
+
+                // 提交任务并同步
+                SubmitTaskAndSynchronize();
+                // 更新总计模拟时间
+                totalSimulateMilliSeconds += simulateTimer.GetDeltaTime();
+                // 更新总步数
+                totalSteps++;
+                // 将计算结果更新到渲染器缓冲区
+                foreach (GaussianObject gaussianObject in _gaussianObjects)
+                {
+                    gaussianObject.UpdateGaussianData(_gsPositionBuffer, _gsOtherBuffer);
+                }
             }
         }
 

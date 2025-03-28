@@ -851,7 +851,6 @@ namespace GaussianSplatting.Runtime
                 m_PrevHash = curHash;
                 if (resourcesAreSetUp)
                 {
-                    Debug.Log("GS:Update");
                     DisposeResourcesForAsset();
                     CreateResourcesForAsset();
                 }
@@ -862,7 +861,7 @@ namespace GaussianSplatting.Runtime
                 }
             }
         }
-        
+
 
         public void ActivateCamera(int index)
         {

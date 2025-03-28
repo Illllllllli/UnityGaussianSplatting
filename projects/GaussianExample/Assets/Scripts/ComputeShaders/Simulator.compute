@@ -1481,12 +1481,12 @@ void apply_interpolation_i(uint3 id : SV_DispatchThreadID)
             const float3 l_Ds_w = mul(local_Ds, l_w);
             // 更新GS位置
             store_gs_pos(gs_position_buffer, l_Ds_w + local_x[3], idx);
-
+    
             float3x3 local_DS_inv = inverse_3x3(local_DS);
             float3x3 F = mul(local_Ds, local_DS_inv);
             // 把F存储到中间缓冲区
             apply_interpolation_F_buffer[idx] = F;
-            // 剩下的步骤是计算用于旋转SH的gs_local_rot矩阵。因为没有定义所以忽略
+    // 剩下的步骤是计算用于旋转SH的gs_local_rot矩阵。因为没有定义所以忽略
         }
     }
 }
@@ -1517,5 +1517,6 @@ void apply_interpolation_ii(uint3 id : SV_DispatchThreadID)
             const float3 new_scale = sqrt(max(float3(sigma[0][0], sigma[1][1], sigma[2][2]), 1e-8f));
             store_gs_scale(gs_other_buffer, new_scale, idx);
         }
+        store_gs_scale(gs_other_buffer, load_gs_scale(gs_other_buffer, idx) * 1.01, idx);
     }
 }
