@@ -59,6 +59,7 @@ public class Status : MonoBehaviour
         {
             if (_playMode == value) return;
             _playMode = value;
+            Debug.Log("changed");
             PlayModeChanged?.Invoke(_playMode, value);
         }
     }
@@ -215,6 +216,8 @@ public class Status : MonoBehaviour
     /// </summary>
     private void OnDestroy()
     {
+        // 只有销毁单例的时候才执行摧毁操作
+        if (this != _containerInstance) return;
         // 清空订阅事件
         if (PlayModeChanged != null)
         {

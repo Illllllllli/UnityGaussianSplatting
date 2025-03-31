@@ -141,11 +141,10 @@ namespace GSTestScene
             {
                 UpdateSplatInfo(gsRenderer, EventArgs.Empty);
             }
-            testButton.onClick.AddListener(() =>
-            {
-            });
-            
+
+            testButton.onClick.AddListener(() => { });
         }
+        
 
         /// <summary>
         /// 反转右侧属性菜单的激活性
@@ -244,25 +243,28 @@ namespace GSTestScene
             {
                 gameObject.GetComponent<GaussianSimulator>()?.ResetSimulate();
             }
+
             switch (mode)
             {
                 case PlayMode.Select:
+                    Debug.Log("select");
                     SetButtonColor(viewButton, DisableColor);
                     SetButtonColor(selectButton, EnableColor);
                     SetButtonColor(editButton, DisableColor);
-                    SetButtonColor(simulateButton,DisableColor);
+                    SetButtonColor(simulateButton, DisableColor);
                     break;
                 case PlayMode.View:
+                    Debug.Log("view");
                     SetButtonColor(viewButton, EnableColor);
                     SetButtonColor(selectButton, DisableColor);
                     SetButtonColor(editButton, DisableColor);
-                    SetButtonColor(simulateButton,DisableColor);
+                    SetButtonColor(simulateButton, DisableColor);
                     break;
                 case PlayMode.Simulate:
                     SetButtonColor(viewButton, DisableColor);
                     SetButtonColor(selectButton, DisableColor);
                     SetButtonColor(editButton, DisableColor);
-                    SetButtonColor(simulateButton,EnableColor);
+                    SetButtonColor(simulateButton, EnableColor);
                     break;
                 case PlayMode.None:
                 default:

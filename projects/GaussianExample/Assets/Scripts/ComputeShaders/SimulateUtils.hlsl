@@ -1,5 +1,5 @@
-# ifndef _SIMUTILS
-# define _SIMUTILS_
+# ifndef _SIMULATE_UTILS_
+# define _SIMULATE_UTILS_
 
 // 模拟用功能文件
 #include "Packages/org.nesnausk.gaussian-splatting/Shaders/GaussianSplatting.hlsl"// 用于解码和编码uint表示的GS数据

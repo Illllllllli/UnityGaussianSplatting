@@ -1,5 +1,5 @@
-# ifndef _MATHUTILS_
-# define _MATHUTILS_
+# ifndef _MATH_UTILS_
+# define _MATH_UTILS_
 
 
 #include  "SifakisSVD.hlsl"

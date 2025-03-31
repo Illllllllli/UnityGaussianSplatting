@@ -1,3 +1,6 @@
+# ifndef _SVD_
+# define _SVD_
+
 const int sweeps = 4;
 const float four_gamma_squared = 5.82842712474619f; // sqrt(8.) + 3.;
 const float sine_pi_over_eight =
@@ -1004,3 +1007,5 @@ inline void svd(const float a11,
     sigma3 = Sa33;
     // output
 }
+
+# endif
