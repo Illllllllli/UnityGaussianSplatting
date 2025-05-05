@@ -1,4 +1,6 @@
-﻿namespace GSTestScene.Simulation
+﻿using UnityEngine;
+
+namespace GSTestScene.Simulation
 {
     /// <summary>
     /// 存放物理求解、插值应用相关方法
@@ -21,6 +23,11 @@
         private void SolveFemConstraints(float dt0)
         {
             SolveFemConstraintsCompute(dt0);
+            // todo:先检查刚体部分。
+            // TestBufferFinish<float>(_vertDeltaPosBuffer, arr =>
+            // {
+            //     Debug.Log(arr);
+            // });
             SubmitTaskAndSynchronize();
         }
 

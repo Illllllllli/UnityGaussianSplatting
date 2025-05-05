@@ -1,11 +1,14 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using GaussianSplatting.Editor;
 using GaussianSplatting.Runtime;
 using GSTestScene.Simulation;
 using StartScene;
 using TMPro;
+using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -142,9 +145,120 @@ namespace GSTestScene
                 UpdateSplatInfo(gsRenderer, EventArgs.Empty);
             }
 
-            testButton.onClick.AddListener(() => { });
+            testButton.onClick.AddListener(GenerateCloud);
         }
-        
+
+        public static void GenerateCloud()
+        {
+            const string filePath =
+                "C:\\Users\\25490\\AppData\\LocalLow\\DefaultCompany\\UnityGaussianSplatting\\GaussianAssets\\bear-alignedt\\mesh\\mesh.txt";
+            string[] lines = File.ReadAllLines(filePath);
+            string[] firstLine = lines[0].Trim().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (!int.TryParse(firstLine[0], out int vertexCount) ||
+                !int.TryParse(firstLine[1], out int tetrahedronCount))
+            {
+                Debug.LogError("Failed to parse vertex/tetrahedron count.");
+                return;
+            }
+
+            // 检查数据完整性
+            if (lines.Length < 1 + vertexCount + tetrahedronCount)
+            {
+                Debug.LogError("Insufficient data in file.");
+                return;
+            }
+
+            // 读取顶点坐标
+            List<Vector3> vertices = new List<Vector3>();
+            for (int i = 1; i <= vertexCount; i++)
+            {
+                string line = lines[i].Trim();
+                string[] coords = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                if (coords.Length < 3)
+                {
+                    Debug.LogError($"Invalid vertex data at line {i + 1}.");
+                    continue;
+                }
+
+                float x, y, z;
+                if (!float.TryParse(coords[0], out x) ||
+                    !float.TryParse(coords[1], out y) ||
+                    !float.TryParse(coords[2], out z))
+                {
+                    Debug.LogError($"Failed to parse coordinates at line {i + 1}.");
+                    continue;
+                }
+
+                // 转换坐标系（根据实际数据调整）
+                vertices.Add(new Vector3(x, y, z));
+            } // 创建点云父物体
+
+            if (_pointCloudParent)
+            {
+                Destroy(_pointCloudParent);
+            }
+
+            _pointCloudParent = new();
+            _pointCloudParent.transform.position = Vector3.zero;
+
+            // 创建统一网格
+            Mesh mesh = new Mesh();
+            mesh.vertices = vertices.ToArray();
+            int[] indices = new int[vertices.Count];
+            for (int i = 0; i < vertices.Count; i++)
+            {
+                indices[i] = i;
+            }
+
+            mesh.SetIndices(indices, MeshTopology.Points, 0);
+
+            // 添加网格组件
+            MeshFilter meshFilter = _pointCloudParent.AddComponent<MeshFilter>();
+            MeshRenderer meshRenderer = _pointCloudParent.AddComponent<MeshRenderer>();
+            meshFilter.mesh = mesh;
+            meshRenderer.material = new Material(Shader.Find("Custom/PointCloud"));
+            meshRenderer.material.SetColor("_Color", Color.red);
+            meshRenderer.material.SetFloat("_PointSize", 5);
+
+
+            Debug.Log($"Generated {vertices.Count} points.");
+        }
+
+        private static GameObject _pointCloudParent;
+
+        public static void GenerateCloud(List<Vector3> vertices)
+        {
+            if (_pointCloudParent)
+            {
+                Destroy(_pointCloudParent);
+            }
+
+            _pointCloudParent = new();
+            _pointCloudParent.transform.position = Vector3.zero;
+
+
+            // 创建统一网格
+            Mesh mesh = new Mesh();
+            mesh.vertices = vertices.ToArray();
+            int[] indices = new int[vertices.Count];
+            for (int i = 0; i < vertices.Count; i++)
+            {
+                indices[i] = i;
+            }
+
+            mesh.SetIndices(indices, MeshTopology.Points, 0);
+
+            // 添加网格组件
+            MeshFilter meshFilter = _pointCloudParent.AddComponent<MeshFilter>();
+            MeshRenderer meshRenderer = _pointCloudParent.AddComponent<MeshRenderer>();
+            meshFilter.mesh = mesh;
+            meshRenderer.material = new Material(Shader.Find("Custom/PointCloud"));
+            meshRenderer.material.SetColor("_Color", Color.red);
+            meshRenderer.material.SetFloat("_PointSize", 5);
+
+
+            // Debug.Log($"Generated {vertices.Count} points.");
+        }
 
         /// <summary>
         /// 反转右侧属性菜单的激活性
@@ -183,7 +297,6 @@ namespace GSTestScene
             {
                 if (Status.playMode == PlayMode.Simulate)
                 {
-                    GetComponent<GaussianSimulator>().ResetSimulate();
                     Status.SwitchViewMode();
                     SetButtonColor(simulateButton, DisableColor);
                     simulateText.SetText("Start Simulate (6)");
@@ -242,19 +355,18 @@ namespace GSTestScene
             if (mode != PlayMode.Simulate)
             {
                 gameObject.GetComponent<GaussianSimulator>()?.ResetSimulate();
+                simulateText.SetText("Start Simulate (6)");
             }
 
             switch (mode)
             {
                 case PlayMode.Select:
-                    Debug.Log("select");
                     SetButtonColor(viewButton, DisableColor);
                     SetButtonColor(selectButton, EnableColor);
                     SetButtonColor(editButton, DisableColor);
                     SetButtonColor(simulateButton, DisableColor);
                     break;
                 case PlayMode.View:
-                    Debug.Log("view");
                     SetButtonColor(viewButton, EnableColor);
                     SetButtonColor(selectButton, DisableColor);
                     SetButtonColor(editButton, DisableColor);

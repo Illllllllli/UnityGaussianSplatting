@@ -164,7 +164,7 @@ namespace GSTestScene
             Add,
             Delete
         }
-        
+
 
         private void Start()
         {
@@ -442,8 +442,7 @@ namespace GSTestScene
             UpdateProfile();
             _wslPythonRunner = new WslPythonRunner();
             bool checkProfile = _profile.GetCommand(out string command);
-            Debug.Log(command);
-            string workPath = WslPythonRunner.ConvertToWslPath(Status.CondaEnvName);
+            string workPath = WslPythonRunner.ConvertToWslPath(Status.EditorFolder);
             if (checkProfile)
             {
                 // UI和编辑器模式更新
@@ -452,6 +451,7 @@ namespace GSTestScene
                 Status.SwitchViewMode();
                 MainUIManager.ShowTip("Edit started. Manual edits will not be saved until edit finished.");
                 // 调用编辑指令
+                Debug.Log($"source activate {Status.CondaEnvName} && cd {workPath} && python {command}");
                 await _wslPythonRunner.ExecuteWslCommand(
                     $"source activate {Status.CondaEnvName} && cd {workPath} && python {command}",
                     OnFinished, DataReceived, ErrorReceived);
@@ -577,6 +577,7 @@ namespace GSTestScene
                 MainUIManager.ShowTip($"Update failed : {e}");
                 Debug.LogError(e);
             }
+
             Status.UpdateIsInteractive(true);
 
 

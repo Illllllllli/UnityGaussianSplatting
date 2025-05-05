@@ -133,6 +133,26 @@ inline void store_matrix_float(const float3x3 mat, inout RWStructuredBuffer<floa
     }
 }
 
+/**
+ * 对浮点缓冲区的进行原子最小值更换
+ * @param float_buffer 以uint存储的缓冲区
+ * @param index 索引
+ * @param value 输入值
+ */
+inline void atomic_min_float(inout RWStructuredBuffer<uint> float_buffer, const int index, const float value)
+{
+    uint current, original;
+    do
+    {
+        current = float_buffer[index];
+        const float current_float = asfloat(current); // 二进制转 float
+        const float new_float = min(current_float, value);
+        const uint new_uint = asuint(new_float); // float 转二进制
+        InterlockedCompareExchange(float_buffer[index], current, new_uint, original);
+    }
+    while (original != current);
+}
+
 
 /**
  * 对浮点缓冲区的原子加法

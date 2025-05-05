@@ -37,6 +37,15 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""initialStateCheck"": false
                 },
                 {
+                    ""name"": ""Mouse Right Click"",
+                    ""type"": ""Button"",
+                    ""id"": ""6af36bf4-d293-4158-adec-eb2967efc40a"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
                     ""name"": ""Mouse Movement"",
                     ""type"": ""Value"",
                     ""id"": ""9b94e6bb-ac6b-49d7-8606-0ce6d9ed2088"",
@@ -605,6 +614,17 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
                     ""action"": ""Space"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""f31cf5c1-91ac-4bc9-968e-09758c4f9454"",
+                    ""path"": ""<Mouse>/rightButton"",
+                    ""interactions"": ""Press"",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Mouse Right Click"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
                 }
             ]
         }
@@ -614,6 +634,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         // Player
         m_Player = asset.FindActionMap("Player", throwIfNotFound: true);
         m_Player_MouseLeftClick = m_Player.FindAction("Mouse Left Click", throwIfNotFound: true);
+        m_Player_MouseRightClick = m_Player.FindAction("Mouse Right Click", throwIfNotFound: true);
         m_Player_MouseMovement = m_Player.FindAction("Mouse Movement", throwIfNotFound: true);
         m_Player_MouseWheel = m_Player.FindAction("Mouse Wheel", throwIfNotFound: true);
         m_Player_SwitchViewMode = m_Player.FindAction("Switch View Mode", throwIfNotFound: true);
@@ -700,6 +721,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
     private readonly InputActionMap m_Player;
     private List<IPlayerActions> m_PlayerActionsCallbackInterfaces = new List<IPlayerActions>();
     private readonly InputAction m_Player_MouseLeftClick;
+    private readonly InputAction m_Player_MouseRightClick;
     private readonly InputAction m_Player_MouseMovement;
     private readonly InputAction m_Player_MouseWheel;
     private readonly InputAction m_Player_SwitchViewMode;
@@ -729,6 +751,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
         private @UserAction m_Wrapper;
         public PlayerActions(@UserAction wrapper) { m_Wrapper = wrapper; }
         public InputAction @MouseLeftClick => m_Wrapper.m_Player_MouseLeftClick;
+        public InputAction @MouseRightClick => m_Wrapper.m_Player_MouseRightClick;
         public InputAction @MouseMovement => m_Wrapper.m_Player_MouseMovement;
         public InputAction @MouseWheel => m_Wrapper.m_Player_MouseWheel;
         public InputAction @SwitchViewMode => m_Wrapper.m_Player_SwitchViewMode;
@@ -765,6 +788,9 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
             @MouseLeftClick.started += instance.OnMouseLeftClick;
             @MouseLeftClick.performed += instance.OnMouseLeftClick;
             @MouseLeftClick.canceled += instance.OnMouseLeftClick;
+            @MouseRightClick.started += instance.OnMouseRightClick;
+            @MouseRightClick.performed += instance.OnMouseRightClick;
+            @MouseRightClick.canceled += instance.OnMouseRightClick;
             @MouseMovement.started += instance.OnMouseMovement;
             @MouseMovement.performed += instance.OnMouseMovement;
             @MouseMovement.canceled += instance.OnMouseMovement;
@@ -844,6 +870,9 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
             @MouseLeftClick.started -= instance.OnMouseLeftClick;
             @MouseLeftClick.performed -= instance.OnMouseLeftClick;
             @MouseLeftClick.canceled -= instance.OnMouseLeftClick;
+            @MouseRightClick.started -= instance.OnMouseRightClick;
+            @MouseRightClick.performed -= instance.OnMouseRightClick;
+            @MouseRightClick.canceled -= instance.OnMouseRightClick;
             @MouseMovement.started -= instance.OnMouseMovement;
             @MouseMovement.performed -= instance.OnMouseMovement;
             @MouseMovement.canceled -= instance.OnMouseMovement;
@@ -936,6 +965,7 @@ public partial class @UserAction: IInputActionCollection2, IDisposable
     public interface IPlayerActions
     {
         void OnMouseLeftClick(InputAction.CallbackContext context);
+        void OnMouseRightClick(InputAction.CallbackContext context);
         void OnMouseMovement(InputAction.CallbackContext context);
         void OnMouseWheel(InputAction.CallbackContext context);
         void OnSwitchViewMode(InputAction.CallbackContext context);

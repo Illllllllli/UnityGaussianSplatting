@@ -59,7 +59,6 @@ public class Status : MonoBehaviour
         {
             if (_playMode == value) return;
             _playMode = value;
-            Debug.Log("changed");
             PlayModeChanged?.Invoke(_playMode, value);
         }
     }
@@ -362,7 +361,7 @@ internal static class GsTools
         Matrix4x4 invViewProj = viewProjMatrix.inverse;
         Vector4 worldPos = invViewProj.MultiplyPoint(ndc);
 
-        return worldPos / worldPos.w;
+        return worldPos;
     }
 
     /// <summary>

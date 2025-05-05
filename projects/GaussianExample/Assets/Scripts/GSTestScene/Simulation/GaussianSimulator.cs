@@ -8,7 +8,9 @@ using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.Rendering;
+using UnityEngine.Serialization;
 using Debug = UnityEngine.Debug;
 
 namespace GSTestScene.Simulation
@@ -49,7 +51,7 @@ namespace GSTestScene.Simulation
         public float dt = 1e-3f + 1e-5f;
 
         // 重力加速度，控制物体在Y轴方向（或Z轴，根据isZUp）的下落速度
-        public float gravity = -4.0f;
+        public float gravity = 4.0f;
 
         // 阻尼系数，用于模拟能量耗散（空气阻力）
         public float dampingCoefficient = 5.0f;
@@ -67,13 +69,26 @@ namespace GSTestScene.Simulation
         public float collisionDetectionIterInterval = 100;
 
         // 切换全局坐标系的重力方向.1为重力方向向上
-        public int isZUp = 1;
+        public int isZUp = -1;
 
         // 地面高度，限制物体下落的Y坐标
         public float groundHeight = 0.0f;
 
         // 边界标志位。但不知道具体干什么用
         public int boundary = 0;
+
+        // 单个物体的默认属性
+        // 物体密度(kg/m^3)
+        public float defaultDensity = 1000;
+
+        // 杨氏模量（Pa），控制物体的刚度
+        public float defaultE = 100;
+
+        // 泊松比，描述材料横向压缩与纵向拉伸的比例
+        public float defaultNu = 0.3f;
+
+        // 标记物体是否为刚体（是否可以发生形变）
+        public bool defaultIsRigid = true;
 
         [Header("Simulate Info")]
         // 初始化时间
@@ -120,16 +135,17 @@ namespace GSTestScene.Simulation
         private int _lbvhSortBufferSize; // LBVH的中间排序结果缓冲区的大小。经过基数排序后才能确定
 
         // 鼠标控制相关参数
-        private bool isMousePressed => GetComponent<UserActionListener>().isMousePressed; // 当前鼠标是否按下
-        private const float ControllerRadius = 1f; // 鼠标能控制的顶点半径范围
-        private const float ReferenceDepth = 5.0f; // 假设交互固定发生在相机前方5米平面
+        private bool _isMousePressed; // 鼠标是否按下
+        public float controllerRadius = 1f; // 鼠标能控制的顶点半径范围
+        public float controllerSensitivity = 100.0f; // 鼠标拖动灵敏度
         private float _lastMouseTime; // 上一次鼠标时间
         private Vector2 _lastControllerScreenPos = Vector2.positiveInfinity; // 上一次鼠标位置
         private Vector2 _controllerScreenPos = Vector2.positiveInfinity; // 本次鼠标位置
-        private Vector3 _controllerPosition = Vector3.positiveInfinity; // 本次鼠标位置的世界坐标
+        private Vector3 _cameraPosition = Vector3.positiveInfinity; // 本次鼠标位置的世界坐标
+        private Vector3 _controllerDirection = Vector3.positiveInfinity; // 本次鼠标射线的世界向量
         private Vector3 _controllerVelocity = Vector3.positiveInfinity; // 速度
         private readonly Vector3 _controllerAngularVelocity = Vector3.zero; // 角速度，但是感觉没有办法正确检测，因此先固定为0
-
+        private ComputeBuffer _selectedMinDistBuffer;// 用于原子比较最小距离的缓冲区
 
         // 网格相关基本参数
         // 顶点/边/面/四面体总数
@@ -252,10 +268,14 @@ namespace GSTestScene.Simulation
         private readonly int _groundHeightId = Shader.PropertyToID("ground_height");
 
         //控制器
-        private readonly int _controllerPositionId = Shader.PropertyToID("controller_position");
+        private readonly int _cameraPositionId = Shader.PropertyToID("camera_position");
         private readonly int _controllerVelocityId = Shader.PropertyToID("controller_velocity");
+        private readonly int _controllerDirectionId = Shader.PropertyToID("controller_direction");
+
         private readonly int _controllerAngleVelocityId = Shader.PropertyToID("controller_angle_velocity");
         private readonly int _controllerRadiusId = Shader.PropertyToID("controller_radius");
+        private readonly int _selectedMinDistBufferId = Shader.PropertyToID("selected_min_dist_buffer");
+
 
         //GS
         private readonly int _gsTotalCountId = Shader.PropertyToID("gs_total_count");
@@ -407,6 +427,8 @@ namespace GSTestScene.Simulation
             // 记录时间和位置
             _lastMouseTime = Time.time;
             _lastControllerScreenPos = Mouse.current.position.ReadValue();
+            _isMousePressed = true;
+            Debug.Log("down");
         }
 
         /// <summary>
@@ -419,6 +441,8 @@ namespace GSTestScene.Simulation
             _controllerScreenPos = Vector2.positiveInfinity;
             _controllerVelocity = Vector3.positiveInfinity;
             _lastMouseTime = 0;
+            _isMousePressed = false;
+            Debug.Log("up");
         }
 
         /// <summary>
@@ -431,12 +455,14 @@ namespace GSTestScene.Simulation
             // todo:更改一下逻辑以获取正确的鼠标深度（通过步进和并行检测来实现简易raycasting)
             if (_lastControllerScreenPos.Equals(Vector2.positiveInfinity)) return;
             _controllerScreenPos = Mouse.current.position.ReadValue();
-            _controllerPosition = GsTools.GetMouseWorldPos(_controllerScreenPos, mainCamera, ReferenceDepth);
+            _cameraPosition = mainCamera.transform.position;
+            _controllerDirection = mainCamera.ScreenPointToRay(Input.mousePosition).direction;
+            Debug.Log(_controllerDirection);
             //计算屏幕空间速度
             Vector2 screenDelta = _controllerScreenPos - _lastControllerScreenPos;
             float deltaTime = time - _lastMouseTime;
             Vector2 screenVelocity = screenDelta / deltaTime;
-            _controllerVelocity = GsTools.ScreenToWorldVelocity(cam, screenVelocity, ReferenceDepth);
+            _controllerVelocity = GsTools.ScreenToWorldVelocity(cam, screenVelocity, controllerSensitivity);
             // 更新上次屏幕位置和触发时间为本次统计
             _lastControllerScreenPos = _controllerScreenPos;
             _lastMouseTime = time;
@@ -477,8 +503,7 @@ namespace GSTestScene.Simulation
                 // 初始化每个物体的参数和公共参数
                 GameObject tip = MainUIManager.ShowTip("Preparing for simulation...", false);
                 tip.GetComponent<TipsManager>().SetButtonInteractable(false);
-                bool success = InitializeSimulationParams();
-                if (!success)
+                if (!InitializeSimulationParams())
                 {
                     MainUIManager.ShowTip("Something went wrong, please check your asset file.");
                     return;
@@ -545,6 +570,7 @@ namespace GSTestScene.Simulation
 
         void Start()
         {
+            InitializeParamUI();
         }
 
         // Update is called once per frame
@@ -554,31 +580,31 @@ namespace GSTestScene.Simulation
             {
                 using TimerUtil simulateTimer = new TimerUtil("Simulate");
                 //拖拽过程中，更新鼠标速度
-                if (isMousePressed)
+                if (_isMousePressed)
                 {
                     UpdateMouseVelocity(Time.time, mainCamera);
-                    // Debug.Log($"velocity:{_controllerVelocity}");
                 }
 
                 //根据鼠标的位置选择范围内的顶点，更新数据
                 UpdateSelectVertices();
 
                 //碰撞检测计数
-                int collisionCount = 0;
+                // int collisionCount = 0;
                 // 将一帧长(frame_dt)分割成多个子时间段(dt)
                 float dtLeft = frameDt;
                 while (dtLeft > 0f)
                 {
                     // 每隔 collision_dection_iter_interval 步执行一次碰撞检测，减少计算量
-                    if (collisionCount % collisionDetectionIterInterval == 0)
-                    {
-                        using TimerUtil collisionDetectionTimer = new TimerUtil("Collision Detection");
-                        // 执行碰撞检测
-                        CollisionDetection();
-                        totalCollisionDetectionMilliSeconds += collisionDetectionTimer.GetDeltaTime();
-                    }
+                    // note: 因为只有一个物体，所以不需要碰撞检测的部分
+                    // if (collisionCount % collisionDetectionIterInterval == 0)
+                    // {
+                    //     using TimerUtil collisionDetectionTimer = new TimerUtil("Collision Detection");
+                    //     // 执行碰撞检测
+                    //     CollisionDetection();
+                    //     totalCollisionDetectionMilliSeconds += collisionDetectionTimer.GetDeltaTime();
+                    // }
 
-                    collisionCount++;
+                    // collisionCount++;
                     float dt0 = Mathf.Min(dt, dtLeft);
                     dtLeft -= dt0;
 
@@ -591,6 +617,7 @@ namespace GSTestScene.Simulation
                             _totalCellsCount);
                         totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
                     }
+
 
                     // 进行FEM约束求解和碰撞处理
                     for (int i = 0; i < xpbdRestIter; i++)
@@ -608,13 +635,15 @@ namespace GSTestScene.Simulation
                             totalFemSolveMilliSeconds += femTimer.GetDeltaTime();
                         }
 
+
                         // 碰撞约束：解决顶点与三角形面之间的穿透
-                        using (TimerUtil collisionSolveTimer =
-                               new TimerUtil("Solve Triangle Point Distance Constraint"))
-                        {
-                            SolveTrianglePointDistanceConstraint();
-                            totalCollisionSolveMilliSeconds += collisionSolveTimer.GetDeltaTime();
-                        }
+                        // note: 因为只有一个物体，所以不需要碰撞检测的部分
+                        // using (TimerUtil collisionSolveTimer =
+                        //        new TimerUtil("Solve Triangle Point Distance Constraint"))
+                        // {
+                        //     SolveTrianglePointDistanceConstraint();
+                        //     totalCollisionSolveMilliSeconds += collisionSolveTimer.GetDeltaTime();
+                        // }
 
                         // 更新位置
                         using (TimerUtil xpbdTimer = new TimerUtil("PBD Post Solve"))
@@ -638,6 +667,18 @@ namespace GSTestScene.Simulation
                     SolveRigid();
                     totalXpbdMilliSeconds += xpbdTimer.GetDeltaTime();
                 }
+
+                //test
+                float[] verts = new float[_totalVerticesCount * 3];
+                List<Vector3> vertices = new List<Vector3>();
+                _vertxBuffer.GetData(verts);
+                for (int i = 0; i < verts.Length; i += 3)
+                {
+                    vertices.Add(new Vector3(verts[i], verts[i + 1], verts[i + 2]));
+                }
+
+                // MainUIManager.GenerateCloud(vertices);
+
 
                 // 将物理顶点位置转换为高斯泼溅的渲染属性（位置、缩放、旋转）。
                 // 插值方法：基于四面体权重（tet_w）在全局和局部坐标系间插值。

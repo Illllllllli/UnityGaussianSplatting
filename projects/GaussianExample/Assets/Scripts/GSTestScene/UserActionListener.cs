@@ -48,7 +48,10 @@ namespace GSTestScene
             // 鼠标左键按下
             _userAction.Player.MouseLeftClick.performed += _ =>
             {
-                isMousePressed = true;
+                if (Status.playMode != PlayMode.Simulate)
+                {
+                    isMousePressed = true;
+                }
                 //当前为选择模式且鼠标不在UI上且不是在编辑状态下
                 if (Status.playMode == PlayMode.Select && Status.selectEditMode == SelectEditMode.None &&
                     !GsTools.IsPointerOverUIObject())
@@ -70,7 +73,11 @@ namespace GSTestScene
             // 鼠标左键抬起
             _userAction.Player.MouseLeftClick.canceled += _ =>
             {
-                isMousePressed = false;
+                if (Status.playMode != PlayMode.Simulate)
+                {
+                    isMousePressed = false;
+                }
+
                 if (Status.playMode == PlayMode.Select)
                 {
                     _mouseStartSelectPos = Vector2.zero;
@@ -95,7 +102,6 @@ namespace GSTestScene
                     {
                         return;
                     }
-
                     _previousMousePosition = rectEnd;
 
                     //y坐标偏移
@@ -169,7 +175,7 @@ namespace GSTestScene
                 if (!isMousePressed) return;
                 if (Status.isInteractive < 0) return;
                 if (GsTools.IsPointerOverUIObject()) return;
-                if (Status.playMode != PlayMode.View) return;
+                if (Status.playMode != PlayMode.View && Status.playMode != PlayMode.Simulate) return;
                 {
                     Vector2 mouseDelta = ctx.ReadValue<Vector2>();
 
@@ -334,6 +340,21 @@ namespace GSTestScene
                     GetComponent<GaussianSimulator>().MouseUp();
                 }
             };
+            _userAction.Player.MouseRightClick.performed += _ =>
+            {
+                if (Status.playMode == PlayMode.Simulate)
+                {
+                    isMousePressed = true;
+                }
+            };
+            _userAction.Player.MouseRightClick.canceled += _ =>
+            {
+                if (Status.playMode == PlayMode.Simulate)
+                {
+                    isMousePressed = false;
+                }
+            };
+
             _userAction.Player.Space.performed += _ =>
             {
                 if (Status.playMode == PlayMode.Simulate)

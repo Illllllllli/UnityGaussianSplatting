@@ -61,7 +61,8 @@ float ground_height; //地面高度
 float collision_stiffness; // 碰撞刚度系数
 
 // 控制器参数
-float3 controller_position; //控制器的位置
+float3 camera_position; //相机的位置
+float3 controller_direction; //控制器的射线方向
 float3 controller_velocity; //控制器的速度
 float3 controller_angle_velocity; //控制器的角速度
 float controller_radius; //控制器影响半径
@@ -143,7 +144,7 @@ int cell_local_count;
 int cell_local_offset;
 
 /// 控制器更新部分 ///
-
+RWStructuredBuffer<uint> selected_min_dist_buffer;
 /**
  * 根据控制器位置更新选定的顶点
  * @param id 线程ID
@@ -152,12 +153,35 @@ int cell_local_offset;
 void select_vertices(uint3 id : SV_DispatchThreadID)
 {
     const uint idx = id.x;
-    const float3 pos = vertices_x_buffer[idx];
-    const float dist = distance(pos, controller_position);
-
-    if (dist <= controller_radius)
+    if (idx == 0)
     {
-        vert_selected_indices_buffer[idx] |= 1; // 使用最低位表示选中状态
+        selected_min_dist_buffer[0] = 0x7f7fffff;
+    }
+    if (idx < vertices_total_count)
+    {
+        const float3 vert_pos = vertices_x_buffer[idx];
+        const float3 point_vector = vert_pos - camera_position; // 顶点到相机的距离
+        const float t = dot(point_vector, controller_direction) / dot(controller_direction, controller_direction);
+        //点乘计算方向模长
+        const float3 closest_point = camera_position + t * controller_direction; //射线上距离顶点最近的点
+        const float dist = distance(vert_pos, closest_point); // 顶点到射线的距离
+
+        if (dist <= controller_radius / 3) // 在控制器阈值的1/3内寻找顶点
+        {
+            atomic_min_float(selected_min_dist_buffer, 0, length(point_vector));
+        }
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (idx < vertices_total_count)
+    {
+        const float3 vert_pos = vertices_x_buffer[idx];
+        // 找到近似离相机最近的顶点
+        const float3 nearest_pos = camera_position + asfloat(selected_min_dist_buffer[0]) * controller_direction;
+        const float dist = distance(vert_pos, nearest_pos);
+        if (dist <= controller_radius)
+        {
+            vert_selected_indices_buffer[idx] = 1;
+        }
     }
 }
 
@@ -169,7 +193,7 @@ void select_vertices(uint3 id : SV_DispatchThreadID)
 void clean_selected_vertices(uint3 id : SV_DispatchThreadID)
 {
     const uint idx = id.x;
-    vert_selected_indices_buffer[idx] &= ~1; // 清除最低位
+    vert_selected_indices_buffer[idx] = 0;
 }
 
 /// 初始化部分 ///
@@ -196,7 +220,7 @@ void initialize_covariance(uint3 id : SV_DispatchThreadID)
 }
 
 /**
- * 获取GS全局嵌入四面体
+ * 获取GS局部嵌入四面体
  * @param id 线程ID
  */
 [numthreads(BLOCK_SIZE,1,1)]
@@ -205,7 +229,7 @@ void get_local_embeded_tets(uint3 id : SV_DispatchThreadID)
     const int idx = id.x;
     if (idx < gs_total_count)
     {
-        const float fac = 1.5f;
+        const float fac = 0.5f;
         const float3 center = load_gs_pos(gs_position_buffer, idx);
 
         // 协方差矩阵的特征分解
@@ -249,12 +273,13 @@ void get_local_embeded_tets(uint3 id : SV_DispatchThreadID)
         }
         // 计算插值权重
         // 构造Ds_local矩阵（顶点0-3相对于顶点3的坐标差）
+        // 原来这里也不需要转置吗。。。
         float ds_local[3][3];
         for (int i = 0; i < 3; i++)
         {
             for (int j = 0; j < 3; j++)
             {
-                ds_local[i][j] = local_tet_x_buffer[(idx * 4 + j) * 3 + i] - local_tet_x_buffer[(idx * 4 + 3) * 3 + i];
+                ds_local[i][j] = local_tet_x_buffer[(idx * 4 + i) * 3 + j] - local_tet_x_buffer[(idx * 4 + 3) * 3 + j];
             }
         }
         // 求逆矩阵
@@ -276,11 +301,11 @@ void get_local_embeded_tets(uint3 id : SV_DispatchThreadID)
 
 /**
  * 获取GS全局嵌入四面体
- * 由于原函数对每一个四面体都调用一次，感觉性能浪费严重，尝试改成对一个物体调用一次，一个线程负责单个GS对单个四面体的权重计算
+ * 由于原函数对每一个四面体都调用一次，感觉性能浪费严重，尝试改成对一个物体调用一次，
+ * 一个线程负责单个GS嵌入的四面体的其中一个顶点对所有属于该物体的全局四面体的权重计算
  * 看起来一个GS对应
  * @param id 线程ID
  */
-// 使用groupshared 数组优化计算速度
 [numthreads(BLOCK_SIZE,1,1)]
 void get_global_embeded_tet(uint3 id : SV_DispatchThreadID)
 {
@@ -290,10 +315,12 @@ void get_global_embeded_tet(uint3 id : SV_DispatchThreadID)
     if (gs_local_id < gs_local_count)
     {
         const int gs_global_id = gs_local_id + gs_local_offset;
+        // 当前线程
         const float3 local_pos = float3(local_tet_x_buffer[(gs_global_id * 4 + c) * 3 + 0],
                                         local_tet_x_buffer[(gs_global_id * 4 + c) * 3 + 1],
                                         local_tet_x_buffer[(gs_global_id * 4 + c) * 3 + 2]);
-        // 改：一个线程遍历所有的四面体
+
+        // 改：一个线程遍历所有的全局四面体
         for (int global_embeded_tid = cell_local_offset; global_embeded_tid < cell_local_count + cell_local_offset;
              global_embeded_tid++)
         {
@@ -315,16 +342,15 @@ void get_global_embeded_tet(uint3 id : SV_DispatchThreadID)
                 continue;
             }
             // ds是全局四面体的三个顶点和全局四面体主顶点的坐标向量差
-            const float3x3 ds = transpose(float3x3(global_pos[0] - global_pos[3],
-                                                   global_pos[1] - global_pos[3],
-                                                   global_pos[2] - global_pos[3]));
-
+            // 哇 这里竟然不需要转置！
+            const float3x3 ds = (float3x3(global_pos[0] - global_pos[3],
+                                          global_pos[1] - global_pos[3],
+                                          global_pos[2] - global_pos[3]));
 
             const float3x3 ds_inv = inverse_3x3(ds);
-            const float3 pos = vertices_X_buffer[cell_indices_buffer[global_embeded_tid * 4 + 3]];
             // local_tet_x是我们计算生成的四面体坐标
-            // dxyz是本地四面体的四个顶点之一和全局四面体的主顶点的坐标向量差
-            const float3 dxyz = local_pos - pos;
+            // dxyz是当前线程处理的本地四面体中的某个顶点和全局四面体的主顶点的坐标向量差
+            const float3 dxyz = local_pos - global_pos[3];
             const float3 w = mul(ds_inv, dxyz);
             // “两层嵌入”核心步骤：每一个GS先嵌入local_embeded_tet，然后在这里用local_embeded_tet的数据嵌入到global_embeded_tet中
             // 如果没有满足条件的就置为0
@@ -923,19 +949,27 @@ void apply_external_force(uint3 id : SV_DispatchThreadID)
             for (int i = 0; i < 3; i++)
             {
                 vert_velocity_buffer[idx * 3 + i] *= exp(-dt * damping_coefficient);
+                vert_velocity_buffer[idx * 3 + i] = 0;
             }
-
             // const float rotation_factor = 0.05f; //旋转因子。虽然目前可能没什么用
             // 原版这里有一个什么“固定顶点”。暂时忽略
             // 应用重力
-            vert_velocity_buffer[idx * 3 + 2] = float(z_up * gravity * dt);
+            // note: 上下是y轴而不是z轴
+            if (vert_selected_indices_buffer[idx] == 0)
+            {
+                const float gravity_factor = 5e4;
+                vert_velocity_buffer[idx * 3 + 1] += z_up * gravity * dt * gravity_factor; // 加了一个常数不然看起来很怪
+            }
             // 应用控制器的力
             // 本来这里会加一个法向速度，但是因为要用到角速度，所以不考虑
             // float3 dpos = vertices_x_buffer[idx] - controller_position;
-            // float3 new_dpos 
-            for (int i = 0; i < 3; i++)
+            // float3 new_dpos
+            else
             {
-                vert_velocity_buffer[idx * 3 + i] += controller_velocity[i];
+                for (int i = 0; i < 3; i++)
+                {
+                    vert_velocity_buffer[idx * 3 + i] = controller_velocity[i];
+                }
             }
         }
         else
@@ -1261,7 +1295,7 @@ void pbd_post_solve(uint3 id : SV_DispatchThreadID)
     if (idx < vertices_total_count)
     {
         // 只更新没有被选中的顶点
-        if (!vert_selected_indices_buffer[idx])
+        if (vert_selected_indices_buffer[idx] == 0)
         {
             vert_new_x_buffer[idx] += asfloat(vert_delta_pos_buffer[idx]);
         }
@@ -1285,18 +1319,18 @@ void pbd_advance(uint3 id : SV_DispatchThreadID)
         else
         {
             // 约束物体不掉到地面下方/上方
-            if (z_up)
+            if (z_up == 1)
             {
-                if (vert_new_x_buffer[idx][2] < ground_height)
+                if (vert_new_x_buffer[idx][1] > ground_height)
                 {
-                    vert_new_x_buffer[idx][2] = ground_height;
+                    vert_new_x_buffer[idx][1] = ground_height;
                 }
             }
             else
             {
-                if (vert_new_x_buffer[idx][2] > ground_height)
+                if (vert_new_x_buffer[idx][1] < ground_height)
                 {
-                    vert_new_x_buffer[idx][2] = ground_height;
+                    vert_new_x_buffer[idx][1] = ground_height;
                 }
             }
             // 更新顶点速度
@@ -1337,7 +1371,7 @@ void solve_rigid_init_mass_center(uint3 id : SV_DispatchThreadID)
 void solve_rigid_compute_A(uint3 id : SV_DispatchThreadID)
 {
     const int idx = id.x;
-    if (idx < vertices_total_count && rigid_vert_group_buffer[idx] > 0)
+    if (idx < vertices_total_count && rigid_vert_group_buffer[idx] >= 0)
     {
         const int object_id = rigid_vert_group_buffer[idx];
         float q_l[3], p_l[3], A[3][3];
@@ -1411,7 +1445,7 @@ void solve_rigid_update_x(uint3 id : SV_DispatchThreadID)
             target[i] = (asfloat(rigid_mass_center_buffer[object_id * 3 + i]) /
                 asfloat(rigid_mass_buffer[object_id])) + cur_vec[i];
         }
-        vertices_x_buffer[idx] += (target - vertices_x_buffer[idx]) * 1.0f;
+        vertices_x_buffer[idx] = target;
     }
 }
 
@@ -1447,7 +1481,7 @@ void apply_interpolation_i(uint3 id : SV_DispatchThreadID)
                     vertices_X_buffer[cell_indices_buffer[t_id * 4 + 2]] - vertices_X_buffer[cell_indices_buffer[t_id *
                         4 + 3]]
                 ));
-    
+
                 const float3x3 global_Ds = transpose(float3x3(
                     vertices_x_buffer[cell_indices_buffer[t_id * 4 + 0]] - vertices_x_buffer[cell_indices_buffer[t_id *
                         4 + 3]],
@@ -1456,10 +1490,10 @@ void apply_interpolation_i(uint3 id : SV_DispatchThreadID)
                     vertices_x_buffer[cell_indices_buffer[t_id * 4 + 2]] - vertices_x_buffer[cell_indices_buffer[t_id *
                         4 + 3]]
                 ));
-    
+
                 const float3 g_DS_w = mul(global_DS, w);
                 const float3 g_Ds_w = mul(global_Ds, w);
-    
+
                 local_X[c] = g_DS_w + vertices_X_buffer[cell_indices_buffer[t_id * 4 + 3]];
                 local_x[c] = g_Ds_w + vertices_x_buffer[cell_indices_buffer[t_id * 4 + 3]];
             }
@@ -1481,12 +1515,13 @@ void apply_interpolation_i(uint3 id : SV_DispatchThreadID)
             const float3 l_Ds_w = mul(local_Ds, l_w);
             // 更新GS位置
             store_gs_pos(gs_position_buffer, l_Ds_w + local_x[3], idx);
-    
-            float3x3 local_DS_inv = inverse_3x3(local_DS);
+
+            float3x3 local_DS_t = transpose(local_DS);
+            float3x3 local_DS_inv = inverse_3x3(local_DS_t);
             float3x3 F = mul(local_Ds, local_DS_inv);
             // 把F存储到中间缓冲区
             apply_interpolation_F_buffer[idx] = F;
-    // 剩下的步骤是计算用于旋转SH的gs_local_rot矩阵。因为没有定义所以忽略
+            // 剩下的步骤是计算用于旋转SH的gs_local_rot矩阵。因为没有定义所以忽略
         }
     }
 }
@@ -1517,6 +1552,5 @@ void apply_interpolation_ii(uint3 id : SV_DispatchThreadID)
             const float3 new_scale = sqrt(max(float3(sigma[0][0], sigma[1][1], sigma[2][2]), 1e-8f));
             store_gs_scale(gs_other_buffer, new_scale, idx);
         }
-        store_gs_scale(gs_other_buffer, load_gs_scale(gs_other_buffer, idx) * 1.01, idx);
     }
 }

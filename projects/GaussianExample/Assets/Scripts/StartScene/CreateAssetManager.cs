@@ -780,7 +780,6 @@ if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
 
             // 创建提示信息
             TipsManager infoTips = MainUIManager.ShowTip("Creating Asset...").GetComponent<TipsManager>();
-            infoTips.SetButtonInteractable(false);
 
 
             // 创建文件夹(包括colmap)

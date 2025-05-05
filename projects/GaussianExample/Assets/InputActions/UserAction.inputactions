@@ -15,6 +15,15 @@
                     "initialStateCheck": false
                 },
                 {
+                    "name": "Mouse Right Click",
+                    "type": "Button",
+                    "id": "6af36bf4-d293-4158-adec-eb2967efc40a",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
                     "name": "Mouse Movement",
                     "type": "Value",
                     "id": "9b94e6bb-ac6b-49d7-8606-0ce6d9ed2088",
@@ -581,6 +590,17 @@
                     "processors": "",
                     "groups": "",
                     "action": "Space",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "f31cf5c1-91ac-4bc9-968e-09758c4f9454",
+                    "path": "<Mouse>/rightButton",
+                    "interactions": "Press",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Mouse Right Click",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

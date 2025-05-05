@@ -60,13 +60,15 @@ namespace GSTestScene.Simulation
         /// 测试当前buffer的任务是否完成了
         /// </summary>
         /// <param name="computeBuffer">要测试的缓冲区</param>
-        private void TestBufferFinish<T>(ComputeBuffer computeBuffer) where T : struct
+        /// <param name="func">要执行的方法</param>
+        private void TestBufferFinish<T>(ComputeBuffer computeBuffer, Action<NativeArray<T>> func = null)
+            where T : struct
         {
             _commandBuffer.RequestAsyncReadback(computeBuffer, request =>
             {
                 if (request.hasError) return;
                 var values = request.GetData<T>();
-                Debug.Log(values);
+                func?.Invoke(values);
             });
         }
 
@@ -298,7 +300,7 @@ namespace GSTestScene.Simulation
         {
             int gridSize = CeilDivide(_vertxBuffer.count, SimulateBlockSize);
             // 鼠标没有按下时，清空选定的顶点
-            if (_controllerScreenPos == Vector2.positiveInfinity)
+            if (!_isMousePressed || float.IsNaN(_controllerVelocity.magnitude))
             {
                 SetShaderComputeBuffer(simulateShader, cleanSelectionKernel, _vertSelectedIndicesBufferId,
                     _vertSelectedIndicesBuffer);
@@ -307,14 +309,24 @@ namespace GSTestScene.Simulation
             // 否则，更新选定的顶点
             else
             {
-                _commandBuffer.SetComputeFloatParam(simulateShader, _controllerRadiusId, ControllerRadius);
-                _commandBuffer.SetComputeVectorParam(simulateShader, _controllerPositionId, _controllerPosition);
+                _commandBuffer.SetComputeIntParam(simulateShader, _verticesTotalCountId, _totalVerticesCount);
+                _commandBuffer.SetComputeFloatParam(simulateShader, _controllerRadiusId, controllerRadius);
+                _commandBuffer.SetComputeVectorParam(simulateShader, _controllerDirectionId, _controllerDirection);
+                _commandBuffer.SetComputeVectorParam(simulateShader, _cameraPositionId, _cameraPosition);
+                SetShaderComputeBuffer(simulateShader, selectVerticesKernel, _selectedMinDistBufferId,
+                    _selectedMinDistBuffer);
                 SetShaderComputeBuffer(simulateShader, selectVerticesKernel, _vertxBufferId,
                     _vertxBuffer);
                 SetShaderComputeBuffer(simulateShader, selectVerticesKernel, _vertSelectedIndicesBufferId,
                     _vertSelectedIndicesBuffer);
                 _commandBuffer.DispatchCompute(simulateShader, selectVerticesKernel, gridSize, 1, 1);
+                TestBufferFinish<int>(_vertSelectedIndicesBuffer, arr =>
+                {
+                    int count = arr.Count(d => d == 1);
+                    // Debug.Log(count);
+                });
             }
+
 
             SubmitTaskAndSynchronize();
         }
@@ -359,6 +371,8 @@ namespace GSTestScene.Simulation
             int gridSize = CeilDivide(_totalGsCount * 4, SimulateBlockSize);
             SetShaderComputeBuffer(simulateShader, getGlobalEmbededTetKernel, _vertXBufferId,
                 _vertXBuffer);
+            SetShaderComputeBuffer(simulateShader, getGlobalEmbededTetKernel, _gsPositionBufferId,
+                _gsPositionBuffer); //test
             SetShaderComputeBuffer(simulateShader, getGlobalEmbededTetKernel, _cellIndicesBufferId,
                 _cellIndicesBuffer);
             SetShaderComputeBuffer(simulateShader, getGlobalEmbededTetKernel, _localTetXBufferId,
@@ -597,10 +611,10 @@ namespace GSTestScene.Simulation
             SetShaderComputeBuffer(simulateShader, applyExternalForceKernel, _vertNewXBufferId, _vertNewXBuffer);
             SetShaderComputeBuffer(simulateShader, applyExternalForceKernel, _vertSelectedIndicesBufferId,
                 _vertSelectedIndicesBuffer);
-            _commandBuffer.SetComputeVectorParam(simulateShader, _controllerPositionId,
-                _controllerPosition);
+            _commandBuffer.SetComputeVectorParam(simulateShader, _cameraPositionId,
+                _cameraPosition.Equals(Vector3.positiveInfinity) ? Vector3.zero : _cameraPosition);
             _commandBuffer.SetComputeVectorParam(simulateShader, _controllerVelocityId,
-                _controllerVelocity);
+                _controllerVelocity.Equals(Vector3.positiveInfinity) ? Vector3.zero : _controllerVelocity);
             _commandBuffer.SetComputeVectorParam(simulateShader, _controllerAngleVelocityId,
                 _controllerAngularVelocity);
             _commandBuffer.SetComputeIntParam(simulateShader, _verticesTotalCountId, _totalVerticesCount);
@@ -785,6 +799,10 @@ namespace GSTestScene.Simulation
             _commandBuffer.SetComputeIntParam(simulateShader, _gsTotalCountId, _totalGsCount);
             _commandBuffer.DispatchCompute(simulateShader, applyInterpolationIKernel, gridSize, 1, 1);
             // 执行并同步
+            // TestBufferFinish<float>(_applyInterpolationFBuffer, arr =>
+            // {
+            //     Debug.Log(arr);
+            // });
             SubmitTaskAndSynchronize();
             // 第二部分
             SetShaderComputeBuffer(simulateShader, applyInterpolationIIKernel, _covBufferId, _covBuffer);
@@ -806,18 +824,26 @@ namespace GSTestScene.Simulation
     public class MaterialProperty
     {
         // 物体密度(kg/m^3)
-        public float density = 1000;
+        public float density;
 
         // 杨氏模量（Pa），控制物体的刚度
-        public float E = 1000;
+        public float E;
 
         // 泊松比，描述材料横向压缩与纵向拉伸的比例
-        public float nu = 0.3f;
+        public float nu;
 
         // 标记物体是否为刚体（是否可以发生形变）
-        public bool isRigid = true;
+        public bool isRigid;
 
         // 物体的初始旋转
         public Quaternion rot = Quaternion.identity;
+
+        public MaterialProperty(float density, float E, float nu, bool isRigid)
+        {
+            this.density = density;
+            this.E = E;
+            this.nu = nu;
+            this.isRigid = isRigid;
+        }
     }
 }

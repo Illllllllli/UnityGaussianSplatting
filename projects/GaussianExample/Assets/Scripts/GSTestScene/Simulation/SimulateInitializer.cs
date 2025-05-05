@@ -1,8 +1,10 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 using GaussianSplatting.Runtime;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -26,7 +28,8 @@ namespace GSTestScene.Simulation
             {
                 GameObject gaussianSplat = GaussianSplats[i];
                 GaussianObject gaussianObject = new GaussianObject();
-                MaterialProperty materialProperty = new MaterialProperty();
+                MaterialProperty materialProperty =
+                    new MaterialProperty(defaultDensity, defaultE, defaultNu, defaultIsRigid);
                 GaussianSplatRenderer splatRenderer = gaussianSplat.GetComponent<GaussianSplatRenderer>();
                 // 首先更新每个子物体的属性
                 if (!gaussianObject.InitializeData(splatRenderer, materialProperty, _totalGsCount,
@@ -54,6 +57,8 @@ namespace GSTestScene.Simulation
             try
             {
                 //只有位置相关的缓冲区，stride设为sizeof(float3)
+                // 控制器相关缓冲区
+                _selectedMinDistBuffer = new ComputeBuffer(1, sizeof(uint));
                 // GS相关缓冲区
                 _gsPositionBuffer = new ComputeBuffer(_totalGsCount * 3, sizeof(uint)); // position(3)
                 _gsOtherBuffer = new ComputeBuffer(_totalGsCount * 4, sizeof(uint)); // rotation(1) + scale(3)
@@ -67,13 +72,18 @@ namespace GSTestScene.Simulation
                 _cellIndicesBuffer = new ComputeBuffer(_totalCellsCount * 4, sizeof(int));
 
                 _vertVelocityBuffer = new ComputeBuffer(_totalVerticesCount * 3, sizeof(float));
+                _vertVelocityBuffer.SetData(new float[_totalVerticesCount * 3]);
                 _vertForceBuffer = new ComputeBuffer(_totalVerticesCount * 3, sizeof(float));
                 _vertMassBuffer = new ComputeBuffer(_totalVerticesCount, sizeof(float));
                 _vertMassBuffer.SetData(new float[_totalVerticesCount]);
                 _vertInvMassBuffer = new ComputeBuffer(_totalVerticesCount, sizeof(float));
                 _vertNewXBuffer = new ComputeBuffer(_totalVerticesCount, sizeof(float) * 3);
+                _vertNewXBuffer.SetData(new float[_totalVerticesCount * 3]);
                 _vertDeltaPosBuffer = new ComputeBuffer(_totalVerticesCount, sizeof(float) * 3);
+                _vertDeltaPosBuffer.SetData(new float[_totalVerticesCount * 3]);
+
                 _vertSelectedIndicesBuffer = new ComputeBuffer(_totalVerticesCount, sizeof(int));
+                _vertSelectedIndicesBuffer.SetData(new int[_totalVerticesCount]);
                 _rigidVertGroupBuffer = new ComputeBuffer(_totalVerticesCount, sizeof(int));
                 _cellDsInvBuffer = new ComputeBuffer(_totalCellsCount * 9, sizeof(float));
 
@@ -88,6 +98,7 @@ namespace GSTestScene.Simulation
                 _rigidMassCenterBuffer = new ComputeBuffer(_gaussianObjects.Count * 3, sizeof(float));
                 _rigidMassCenterBuffer.SetData(new float[_gaussianObjects.Count * 3]);
                 _rigidAngleVelocityMatrixBuffer = new ComputeBuffer(_gaussianObjects.Count * 9, sizeof(float));
+                _rigidAngleVelocityMatrixBuffer.SetData(new float[_gaussianObjects.Count * 9]);
                 _rigidRotationMatrixBuffer = new ComputeBuffer(_gaussianObjects.Count * 9, sizeof(float));
 
                 _triangleAabbsBuffer = new ComputeBuffer(_totalFacesCount, Marshal.SizeOf<LbvhAABBBoundingBox>());
@@ -223,17 +234,16 @@ namespace GSTestScene.Simulation
             {
                 InitializeCovariance();
                 GetLocalEmbededTets();
-                // TestBufferFinish<float>(_localTetWBuffer);
                 SubmitTaskAndSynchronize();
+
+
                 SetBufferValue(0xffffffff, 4 * _totalGsCount, 0, _globalTetIdxBuffer);
                 foreach (var gaussianObject in _gaussianObjects.Where(gaussianObject => !gaussianObject.IsBackground))
                 {
                     // 改成一个物体调用一次
                     GetGlobalEmbededTet(gaussianObject);
-                    // TestBufferFinish<float>(_globalTetWBuffer);
                     SubmitTaskAndSynchronize();
                 }
-
 
                 return true;
             }
@@ -253,10 +263,8 @@ namespace GSTestScene.Simulation
             try
             {
                 InitializeFemBases();
-                // TestBufferFinish<float>(_vertMassBuffer);
                 SubmitTaskAndSynchronize();
                 InitializeInvMass();
-                // TestBufferFinish<float>(_vertInvMassBuffer);
                 SubmitTaskAndSynchronize();
                 return true;
             }
@@ -276,8 +284,6 @@ namespace GSTestScene.Simulation
             try
             {
                 InitRigid();
-                // TestBufferFinish<float>(_rigidMassCenterInitBuffer);
-                // TestBufferFinish<float>(_rigidMassBuffer);
                 SubmitTaskAndSynchronize();
                 return true;
             }
@@ -318,6 +324,8 @@ namespace GSTestScene.Simulation
         /// </summary>
         private void Dispose()
         {
+            _selectedMinDistBuffer?.Dispose();
+
             _gsPositionBuffer?.Dispose();
             _gsOtherBuffer?.Dispose();
 
@@ -351,7 +359,11 @@ namespace GSTestScene.Simulation
             _triangleAabbsBuffer?.Dispose();
             _sortedTriangleAabbsBuffer?.Dispose();
             _partialAabbBuffer?.Dispose();
-            _partialAabbData.Dispose();
+            if (_partialAabbData.IsCreated)
+            {
+                _partialAabbData.Dispose();
+            }
+
             _mortonCodeBuffer?.Dispose();
             _sortedMortonCodeBuffer?.Dispose();
             _indicesBuffer?.Dispose();
@@ -372,7 +384,6 @@ namespace GSTestScene.Simulation
             _globalTetIdxBuffer?.Dispose();
             _globalTetWBuffer?.Dispose();
             _applyInterpolationFBuffer?.Dispose();
-
             _commandBuffer?.Dispose();
         }
     }

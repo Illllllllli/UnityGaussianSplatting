@@ -285,14 +285,16 @@ namespace GSTestScene.Simulation
         {
             lock (_renderer.m_GpuPosData)
             {
-                uint[] posData = new uint[(3 * gsNums + 1)];
+                int count = _renderer.m_GpuPosData.count;
+                uint[] posData = new uint[count];
                 gsPositionBuffer.GetData(posData, 0, GsOffset * 3, gsNums * 3);
                 _renderer.m_GpuPosData.SetData(posData);
             }
 
             lock (_renderer.m_GpuOtherData)
             {
-                uint[] otherData = new uint[(4 * gsNums)];
+                int count = _renderer.m_GpuOtherData.count;
+                uint[] otherData = new uint[count];
                 gsOtherBuffer.GetData(otherData, 0, GsOffset * 4, gsNums * 4);
                 _renderer.m_GpuOtherData.SetData(otherData);
             }
