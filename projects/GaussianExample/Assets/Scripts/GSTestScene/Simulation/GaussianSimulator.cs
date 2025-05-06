@@ -137,7 +137,7 @@ namespace GSTestScene.Simulation
         // 鼠标控制相关参数
         private bool _isMousePressed; // 鼠标是否按下
         public float controllerRadius = 1f; // 鼠标能控制的顶点半径范围
-        public float controllerSensitivity = 100.0f; // 鼠标拖动灵敏度
+        public float controllerSensitivity = 500.0f; // 鼠标拖动灵敏度
         private float _lastMouseTime; // 上一次鼠标时间
         private Vector2 _lastControllerScreenPos = Vector2.positiveInfinity; // 上一次鼠标位置
         private Vector2 _controllerScreenPos = Vector2.positiveInfinity; // 本次鼠标位置
@@ -428,7 +428,6 @@ namespace GSTestScene.Simulation
             _lastMouseTime = Time.time;
             _lastControllerScreenPos = Mouse.current.position.ReadValue();
             _isMousePressed = true;
-            Debug.Log("down");
         }
 
         /// <summary>
@@ -442,7 +441,6 @@ namespace GSTestScene.Simulation
             _controllerVelocity = Vector3.positiveInfinity;
             _lastMouseTime = 0;
             _isMousePressed = false;
-            Debug.Log("up");
         }
 
         /// <summary>
@@ -452,12 +450,10 @@ namespace GSTestScene.Simulation
         /// <param name="cam">当前相机</param>
         private void UpdateMouseVelocity(float time, Camera cam)
         {
-            // todo:更改一下逻辑以获取正确的鼠标深度（通过步进和并行检测来实现简易raycasting)
             if (_lastControllerScreenPos.Equals(Vector2.positiveInfinity)) return;
             _controllerScreenPos = Mouse.current.position.ReadValue();
             _cameraPosition = mainCamera.transform.position;
             _controllerDirection = mainCamera.ScreenPointToRay(Input.mousePosition).direction;
-            Debug.Log(_controllerDirection);
             //计算屏幕空间速度
             Vector2 screenDelta = _controllerScreenPos - _lastControllerScreenPos;
             float deltaTime = time - _lastMouseTime;
@@ -677,7 +673,7 @@ namespace GSTestScene.Simulation
                     vertices.Add(new Vector3(verts[i], verts[i + 1], verts[i + 2]));
                 }
 
-                // MainUIManager.GenerateCloud(vertices);
+                MainUIManager.GenerateCloud(vertices);
 
 
                 // 将物理顶点位置转换为高斯泼溅的渲染属性（位置、缩放、旋转）。

@@ -1,5 +1,6 @@
 ﻿using TMPro;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 namespace GSTestScene.Simulation
@@ -36,6 +37,12 @@ namespace GSTestScene.Simulation
 
         public Slider nuSlider;
         public TextMeshProUGUI nuNumber;
+
+        public Slider controllerRadiusSlider;
+        public TextMeshProUGUI controllerRadiusNumber;
+
+        public Slider controllerSensitivitySlider;
+        public TextMeshProUGUI controllerSensitivityNumber;
 
         /// <summary>
         /// 初始化UI模拟参数绑定
@@ -83,6 +90,16 @@ namespace GSTestScene.Simulation
             {
                 nuNumber.SetText($"{value:f2}");
                 defaultNu = value;
+            });
+            controllerRadiusSlider.onValueChanged.AddListener(value =>
+            {
+                controllerRadiusNumber.SetText($"{value:f2}");
+                controllerRadius = value;
+            });
+            controllerSensitivitySlider.onValueChanged.AddListener(value =>
+            {
+                controllerSensitivityNumber.SetText($"{value:f2}");
+                controllerSensitivity = value;
             });
         }
     }

@@ -354,8 +354,8 @@ void get_global_embeded_tet(uint3 id : SV_DispatchThreadID)
             const float3 w = mul(ds_inv, dxyz);
             // “两层嵌入”核心步骤：每一个GS先嵌入local_embeded_tet，然后在这里用local_embeded_tet的数据嵌入到global_embeded_tet中
             // 如果没有满足条件的就置为0
-            if (w[0] >= 0.f && w[1] >= 0.f && w[2] >= 0.f &&
-                w[0] + w[1] + w[2] <= 1.f)
+            // if (w[0] >= 0.f && w[1] >= 0.f && w[2] >= 0.f &&
+            //     w[0] + w[1] + w[2] <= 1.f)
             {
                 global_tet_idx_buffer[gs_global_id * 4 + c] = global_embeded_tid;
                 global_tet_w_buffer[(gs_global_id * 4 + c) * 3 + 0] = w[0];
@@ -949,7 +949,6 @@ void apply_external_force(uint3 id : SV_DispatchThreadID)
             for (int i = 0; i < 3; i++)
             {
                 vert_velocity_buffer[idx * 3 + i] *= exp(-dt * damping_coefficient);
-                vert_velocity_buffer[idx * 3 + i] = 0;
             }
             // const float rotation_factor = 0.05f; //旋转因子。虽然目前可能没什么用
             // 原版这里有一个什么“固定顶点”。暂时忽略
@@ -957,7 +956,7 @@ void apply_external_force(uint3 id : SV_DispatchThreadID)
             // note: 上下是y轴而不是z轴
             if (vert_selected_indices_buffer[idx] == 0)
             {
-                const float gravity_factor = 5e4;
+                const float gravity_factor = 1e3;
                 vert_velocity_buffer[idx * 3 + 1] += z_up * gravity * dt * gravity_factor; // 加了一个常数不然看起来很怪
             }
             // 应用控制器的力
