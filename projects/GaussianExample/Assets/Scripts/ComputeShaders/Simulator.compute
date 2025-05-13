@@ -1260,8 +1260,7 @@ void solve_triangle_point_distance_constraint(uint3 id : SV_DispatchThreadID)
         if (C < 0.0) // 发生穿透
         {
             float s = vert_inv_mass_buffer[v] + vert_inv_mass_buffer[v0] * b0 * b0 + vert_inv_mass_buffer[v1] * b1 * b1
-                + vert_inv_mass_buffer[v2] * b2
-                * b2; // 计算位移缩放因子
+                + vert_inv_mass_buffer[v2] * b2 * b2; // 计算位移缩放因子
             // 原子操作更新顶点位移
             if (s > 0.0)
             {
@@ -1492,7 +1491,7 @@ void apply_interpolation_i(uint3 id : SV_DispatchThreadID)
 
                 const float3 g_DS_w = mul(global_DS, w);
                 const float3 g_Ds_w = mul(global_Ds, w);
-
+                // 计算本地四面体各个坐标。即初始的本地四面体坐标(local_tet_x_buffer)并没有被更新或使用
                 local_X[c] = g_DS_w + vertices_X_buffer[cell_indices_buffer[t_id * 4 + 3]];
                 local_x[c] = g_Ds_w + vertices_x_buffer[cell_indices_buffer[t_id * 4 + 3]];
             }

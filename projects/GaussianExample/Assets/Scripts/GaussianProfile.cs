@@ -213,7 +213,6 @@ public class DeleteProfile : GaussianProfile
                       $"system.max_densify_percent={MaxDensifyPercent} system.densify_from_iter={DensifyFromIter} system.densify_until_iter={DensifyUntilIter} system.densification_interval={DensificationInterval} ";
             return true;
         }
-
         command = generalCommand;
         return false;
     }

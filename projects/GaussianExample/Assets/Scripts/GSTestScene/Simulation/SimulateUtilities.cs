@@ -309,6 +309,7 @@ namespace GSTestScene.Simulation
             // 否则，更新选定的顶点
             else
             {
+                //todo:由于线程组间不能同步而且没办法把所有顶点塞到一个线程组内，因此正确的做法是先执行计算最小距离的核函数，然后再执行并行选择顶点的函数
                 _commandBuffer.SetComputeIntParam(simulateShader, _verticesTotalCountId, _totalVerticesCount);
                 _commandBuffer.SetComputeFloatParam(simulateShader, _controllerRadiusId, controllerRadius);
                 _commandBuffer.SetComputeVectorParam(simulateShader, _controllerDirectionId, _controllerDirection);
